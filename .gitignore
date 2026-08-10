@@ -1,0 +1,13 @@
+node_modules/
+.next/
+# Static export output — rebuilt by the Pages workflow on every push.
+out/
+build/
+*.tsbuildinfo
+next-env.d.ts.bak
+.env*.local
+.DS_Store
+npm-debug.log*
+
+# Per-machine Claude Code state — local paths and permission grants.
+.claude/settings.local.json

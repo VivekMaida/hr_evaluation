@@ -1,0 +1,79 @@
+.strip {
+  display: flex;
+  align-items: flex-end;
+  flex: none;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+}
+
+.score {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  margin-bottom: 6px;
+  white-space: nowrap;
+}
+
+.scoreMuted {
+  color: var(--grey-line);
+}
+
+/* The track is always drawn. A missing month must read as a hole in the year,
+   never as a zero and never as absent. */
+.track {
+  position: relative;
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.trackScored,
+.trackFuture {
+  background: #f2f2f2;
+}
+
+.trackOpen {
+  background: var(--grey-surface);
+}
+
+.trackNotLogged {
+  background: var(--grey-surface);
+  border: 1px dashed var(--grey-line);
+  overflow: visible;
+}
+
+.bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 1px 1px 0 0;
+}
+
+/* Target (100%) against the fixed 0–130 scale. */
+.target {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(20, 65, 104, 0.38);
+  pointer-events: none;
+}
+
+.month {
+  font-size: 11px;
+  color: var(--grey-body);
+  line-height: 1.2;
+  margin-top: 6px;
+  white-space: nowrap;
+}
+
+.monthOpen {
+  color: var(--navy);
+  font-weight: 700;
+}
