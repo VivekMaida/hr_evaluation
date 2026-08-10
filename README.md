@@ -57,6 +57,40 @@ first compile expensive; Turbopack cut the worst route from 9s to 1.3s. Drop the
 The role switch at the foot of the sidebar is a prototype affordance, not part
 of the shipped IA — it stands in for authentication.
 
+## Deploying to GitHub Pages
+
+`.github/workflows/deploy.yml` builds and publishes on every push to `main`.
+In the repo, set **Settings → Pages → Source** to **GitHub Actions** once; after
+that it is automatic. The site lands at `https://<user>.github.io/<repo>/`.
+
+> **Pages from a private repo requires GitHub Pro, Team or Enterprise.** On a
+> free account the workflow runs but the site never becomes reachable. Either
+> upgrade the plan or make the repo public — and read the note on contents in
+> the section above before choosing public.
+
+The app is a static export (`output: 'export'`), so there is no server at
+runtime. Two consequences worth knowing:
+
+- **Every linked employee id must be prebuilt.** `LINKED_EMPLOYEE_IDS` in
+  `lib/scorecard-data.ts` feeds `generateStaticParams` for both
+  `/scorecard/[employeeId]` and `/reviews/[employeeId]`. Add an employee to the
+  fixtures without adding them there and their row will 404 on Pages while
+  working fine under `npm run dev`.
+- **Pages serves from a `/<repo>` subpath.** `next/link` picks that up from
+  `basePath` automatically, but `next/image` with `unoptimized: true` does not —
+  anything pointing at a file in `public/` must go through `asset()` in
+  `lib/base-path.ts`. The workflow sets `NEXT_PUBLIC_BASE_PATH` from the repo
+  name; locally it is empty, so `npm run dev` is unaffected.
+
+To reproduce a Pages build locally:
+
+```bash
+NEXT_PUBLIC_BASE_PATH=/your-repo-name npm run build
+```
+
+That writes `out/`. Serving it from a directory of that name reproduces the
+deployed URL structure exactly.
+
 ## Layout
 
 ```
