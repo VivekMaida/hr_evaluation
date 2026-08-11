@@ -1,90 +1,147 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { YearStrip } from '@/components/YearStrip';
 import { Card, SectionLabel } from '@/components/ui';
+import { buildYear, memberById } from '@/lib/data';
 import {
-  ENTRY_KRAS,
-  ENTRY_SUBJECT,
   NOTE_BAND,
-  buildYear,
-  memberById,
-  type KraRow,
-} from '@/lib/data';
+  achievementOf,
+  blockers,
+  outsideBand,
+  weightedScoreOf,
+  type EntryRow,
+} from '@/lib/entries';
 import { bandColour, pct } from '@/lib/score';
 
-type RowState = { actual: string; note: string };
+type ApiPayload = {
+  employee: { id: string; name: string; title: string };
+  cycle: { id: string; label: string; monthIndex: number; state: string };
+  rows: EntryRow[];
+  weightedScore: number | null;
+  submission: { state: string; weightedScore: number | null; submittedAt: string | null } | null;
+  editable: boolean;
+};
 
-function achievementOf(row: KraRow, actual: string): number | null {
-  const value = Number.parseFloat(actual);
-  if (!Number.isFinite(value)) return null;
-  if (row.lowerIsBetter) {
-    if (value === 0) return null;
-    return (row.target / value) * 100;
-  }
-  if (row.target === 0) return null;
-  return (value / row.target) * 100;
+type Draft = { actual: string; contextNote: string };
+
+function toDraft(rows: EntryRow[]): Record<string, Draft> {
+  return Object.fromEntries(
+    rows.map((r) => [
+      r.kpiId,
+      { actual: r.actual === null ? '' : String(r.actual), contextNote: r.contextNote ?? '' },
+    ]),
+  );
 }
 
-function outsideBand(achievement: number | null): boolean {
-  if (achievement === null) return false;
-  return achievement < NOTE_BAND.low || achievement > NOTE_BAND.high;
-}
+export function EntryForm({
+  employeeId,
+  monthIndex,
+}: {
+  employeeId: string;
+  monthIndex: number;
+}) {
+  const [data, setData] = useState<ApiPayload | null>(null);
+  const [draft, setDraft] = useState<Record<string, Draft>>({});
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<'idle' | 'saving' | 'submitting'>('idle');
+  const [savedAt, setSavedAt] = useState<string | null>(null);
 
-export function EntryForm() {
-  const [rows, setRows] = useState<Record<string, RowState>>(() =>
-    Object.fromEntries(
-      ENTRY_KRAS.map((k) => [k.id, { actual: k.actual, note: k.note }]),
-    ),
+  useEffect(() => {
+    let cancelled = false;
+    setData(null);
+    setLoadError(null);
+
+    fetch(`/api/entries?employeeId=${encodeURIComponent(employeeId)}&monthIndex=${monthIndex}`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText);
+        return res.json() as Promise<ApiPayload>;
+      })
+      .then((payload) => {
+        if (cancelled) return;
+        setData(payload);
+        setDraft(toDraft(payload.rows));
+      })
+      .catch((error: Error) => {
+        if (!cancelled) setLoadError(error.message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [employeeId, monthIndex]);
+
+  // Recompute against what is typed, so the score moves as you type rather than
+  // waiting for a round trip.
+  const rows = useMemo(() => {
+    if (!data) return [];
+    return data.rows.map((row) => {
+      const d = draft[row.kpiId] ?? { actual: '', contextNote: '' };
+      const value = d.actual.trim() === '' ? null : Number.parseFloat(d.actual);
+      const actual = value !== null && Number.isFinite(value) ? value : null;
+      const achievement = achievementOf(row.target, actual, row.lowerIsBetter);
+      return {
+        ...row,
+        actual,
+        contextNote: d.contextNote,
+        achievement,
+        needsNote: outsideBand(achievement),
+      };
+    });
+  }, [data, draft]);
+
+  const weighted = useMemo(() => weightedScoreOf(rows), [rows]);
+  const check = useMemo(() => blockers(rows), [rows]);
+
+  const update = useCallback((kpiId: string, patch: Partial<Draft>) => {
+    setDraft((prev) => ({ ...prev, [kpiId]: { ...prev[kpiId], ...patch } }));
+    setSavedAt(null);
+  }, []);
+
+  const persist = useCallback(
+    async (submit: boolean) => {
+      if (!data) return;
+      setBusy(submit ? 'submitting' : 'saving');
+      setSaveError(null);
+      try {
+        const res = await fetch('/api/entries', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            employeeId,
+            monthIndex,
+            submit,
+            rows: rows.map((r) => ({
+              kpiId: r.kpiId,
+              actual: r.actual,
+              contextNote: r.contextNote.trim() === '' ? null : r.contextNote,
+            })),
+          }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error ?? `Save failed (${res.status})`);
+        setSavedAt(
+          new Date().toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }),
+        );
+        if (submit) {
+          setData((prev) =>
+            prev
+              ? { ...prev, submission: { state: 'SUBMITTED', weightedScore: body.weightedScore, submittedAt: new Date().toISOString() } }
+              : prev,
+          );
+        }
+      } catch (error) {
+        setSaveError((error as Error).message);
+      } finally {
+        setBusy('idle');
+      }
+    },
+    [data, employeeId, monthIndex, rows],
   );
-  const [submitted, setSubmitted] = useState(false);
 
-  const computed = useMemo(
-    () =>
-      ENTRY_KRAS.map((kra) => {
-        const state = rows[kra.id];
-        const achievement = achievementOf(kra, state.actual);
-        const needsNote = outsideBand(achievement);
-        const noteGiven = state.note.trim().length > 0;
-        return {
-          kra,
-          state,
-          achievement,
-          needsNote,
-          noteGiven,
-          blocking: (needsNote && !noteGiven) || achievement === null,
-        };
-      }),
-    [rows],
-  );
-
-  const weighted = useMemo(() => {
-    let sum = 0;
-    let base = 0;
-    for (const row of computed) {
-      if (row.achievement === null) continue;
-      sum += row.achievement * row.kra.weight;
-      base += row.kra.weight;
-    }
-    return base === 0 ? null : sum / base;
-  }, [computed]);
-
-  const missingActuals = computed.filter((r) => r.achievement === null).length;
-  const missingNotes = computed.filter((r) => r.needsNote && !r.noteGiven).length;
-  const blocked = missingActuals > 0 || missingNotes > 0;
-
-  const blockedMessage =
-    missingActuals > 0
-      ? `${missingActuals} actual${missingActuals === 1 ? '' : 's'} still to enter`
-      : `${missingNotes} context note${missingNotes === 1 ? '' : 's'} required before submitting`;
-
-  const update = (id: string, patch: Partial<RowState>) =>
-    setRows((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
-
-  const member = memberById(ENTRY_SUBJECT.id);
-
-  return (
+  const shell = (children: React.ReactNode) => (
     <div
       style={{
         flex: 1,
@@ -96,28 +153,60 @@ export function EntryForm() {
         background: 'var(--white)',
       }}
     >
-      <div
-        className="spread"
-        style={{ alignItems: 'flex-start', gap: 24 }}
-      >
+      {children}
+    </div>
+  );
+
+  if (loadError) {
+    return shell(
+      <div className="callout callout--alert" style={{ padding: '16px 20px' }}>
+        <div className="callout__title">Could not load this month</div>
+        <div style={{ fontSize: 14 }}>{loadError}</div>
+      </div>,
+    );
+  }
+
+  if (!data) {
+    return shell(
+      <div style={{ fontSize: 14.5, color: 'var(--grey-body)' }}>Loading the month…</div>,
+    );
+  }
+
+  const submitted = data.submission?.state === 'SUBMITTED';
+  const editable = data.editable;
+  const member = memberById(employeeId);
+
+  return shell(
+    <>
+      <div className="spread" style={{ alignItems: 'flex-start', gap: 24 }}>
         <div className="stack" style={{ gap: 4 }}>
           <div style={{ fontSize: 23, fontWeight: 600, color: 'var(--navy)' }}>
-            {ENTRY_SUBJECT.name}
+            {data.employee.name}
           </div>
           <div style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
-            {ENTRY_SUBJECT.title} · {ENTRY_SUBJECT.id} · Reports to{' '}
-            {ENTRY_SUBJECT.reportsTo} · {ENTRY_SUBJECT.kraSet}
+            {data.employee.title} · {data.employee.id} · {data.cycle.label}
           </div>
         </div>
         <div className="row" style={{ gap: 10, flex: 'none' }}>
           <span style={{ fontSize: 13, color: 'var(--grey-body)' }}>
-            Draft saved {ENTRY_SUBJECT.draftSavedAt}
+            {savedAt ? `Saved ${savedAt}` : submitted ? 'Submitted' : 'Not saved yet'}
           </span>
-          <Link href="/scorecard/EMP-10233" style={{ fontSize: 13.5, fontWeight: 700 }}>
-            Previous month
+          <Link href={`/scorecard/${employeeId}`} style={{ fontSize: 13.5, fontWeight: 700 }}>
+            Open Scorecard
           </Link>
         </div>
       </div>
+
+      {!editable ? (
+        <div className="callout callout--neutral" style={{ padding: '16px 20px' }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--navy)' }}>
+            {data.cycle.label} is {data.cycle.state.toLowerCase()}. This month is read-only.
+          </div>
+          <div style={{ fontSize: 14, color: 'var(--grey-body)', marginTop: 4 }}>
+            To change a figure here, raise a correction request.
+          </div>
+        </div>
+      ) : null}
 
       <div
         style={{
@@ -132,33 +221,24 @@ export function EntryForm() {
             <thead>
               <tr>
                 <th style={{ padding: '10px 14px' }}>Key result area</th>
-                <th className="is-num" style={{ padding: '10px 10px', width: 74 }}>
-                  Weight
-                </th>
-                <th className="is-num" style={{ padding: '10px 10px', width: 96 }}>
-                  Target
-                </th>
-                <th className="is-num" style={{ padding: '10px 10px', width: 118 }}>
-                  Actual
-                </th>
-                <th className="is-num" style={{ padding: '10px 10px', width: 110 }}>
-                  Achievement
-                </th>
+                <th className="is-num" style={{ padding: '10px 10px', width: 74 }}>Weight</th>
+                <th className="is-num" style={{ padding: '10px 10px', width: 96 }}>Target</th>
+                <th className="is-num" style={{ padding: '10px 10px', width: 118 }}>Actual</th>
+                <th className="is-num" style={{ padding: '10px 10px', width: 110 }}>Achievement</th>
                 <th style={{ padding: '10px 14px', width: 290 }}>Context note</th>
               </tr>
             </thead>
             <tbody>
-              {computed.map(({ kra, state, achievement, needsNote, noteGiven }) => {
-                const flag = needsNote && !noteGiven;
+              {rows.map((row) => {
+                const noteGiven = row.contextNote.trim().length > 0;
+                const flag = row.needsNote && !noteGiven;
                 return (
-                  <tr key={kra.id}>
+                  <tr key={row.kpiId}>
                     <td style={{ padding: '12px 14px' }}>
-                      <div style={{ fontWeight: 700, color: 'var(--navy)' }}>
-                        {kra.name}
-                      </div>
+                      <div style={{ fontWeight: 700, color: 'var(--navy)' }}>{row.name}</div>
                       <div style={{ fontSize: 12.5, color: 'var(--grey-body)' }}>
-                        {kra.basis}
-                        {kra.lowerIsBetter ? (
+                        {row.basis}
+                        {row.lowerIsBetter ? (
                           <>
                             {' · '}
                             <span style={{ color: 'var(--amber)', fontWeight: 700 }}>
@@ -169,12 +249,8 @@ export function EntryForm() {
                         ) : null}
                       </div>
                     </td>
-                    <td className="is-num" style={{ padding: '12px 10px' }}>
-                      {kra.weight}%
-                    </td>
-                    <td className="is-num" style={{ padding: '12px 10px' }}>
-                      {kra.target}
-                    </td>
+                    <td className="is-num" style={{ padding: '12px 10px' }}>{row.weight}%</td>
+                    <td className="is-num" style={{ padding: '12px 10px' }}>{row.target}</td>
                     <td style={{ padding: '9px 10px' }}>
                       <input
                         className="field field--num"
@@ -185,9 +261,10 @@ export function EntryForm() {
                           borderColor: flag ? 'var(--red)' : 'var(--grey-line)',
                         }}
                         inputMode="decimal"
-                        aria-label={`${kra.name} actual`}
-                        value={state.actual}
-                        onChange={(e) => update(kra.id, { actual: e.target.value })}
+                        aria-label={`${row.name} actual`}
+                        disabled={!editable}
+                        value={draft[row.kpiId]?.actual ?? ''}
+                        onChange={(e) => update(row.kpiId, { actual: e.target.value })}
                       />
                     </td>
                     <td
@@ -196,12 +273,12 @@ export function EntryForm() {
                         padding: '12px 10px',
                         fontWeight: 700,
                         color:
-                          achievement === null
+                          row.achievement === null
                             ? 'var(--grey-line)'
-                            : bandColour(achievement),
+                            : bandColour(row.achievement),
                       }}
                     >
-                      {pct(achievement)}
+                      {pct(row.achievement)}
                     </td>
                     <td style={{ padding: '9px 14px' }}>
                       <input
@@ -213,31 +290,23 @@ export function EntryForm() {
                           fontWeight: 400,
                           borderColor: flag ? 'var(--red)' : 'var(--grey-line)',
                         }}
-                        aria-label={`${kra.name} context note`}
+                        aria-label={`${row.name} context note`}
+                        disabled={!editable}
                         placeholder={
-                          needsNote
+                          row.needsNote
                             ? `Required — outside ${NOTE_BAND.low}–${NOTE_BAND.high}%`
                             : 'Optional'
                         }
-                        value={state.note}
-                        onChange={(e) => update(kra.id, { note: e.target.value })}
+                        value={draft[row.kpiId]?.contextNote ?? ''}
+                        onChange={(e) => update(row.kpiId, { contextNote: e.target.value })}
                       />
                       {flag ? (
-                        <div
-                          style={{
-                            marginTop: 5,
-                            fontSize: 12.5,
-                            fontWeight: 700,
-                            color: 'var(--red)',
-                          }}
-                        >
+                        <div style={{ marginTop: 5, fontSize: 12.5, fontWeight: 700, color: 'var(--red)' }}>
                           Context note required before submitting
                         </div>
                       ) : null}
-                      {needsNote && noteGiven ? (
-                        <div
-                          style={{ marginTop: 5, fontSize: 12.5, color: 'var(--green)' }}
-                        >
+                      {row.needsNote && noteGiven ? (
+                        <div style={{ marginTop: 5, fontSize: 12.5, color: 'var(--green)' }}>
                           Note recorded
                         </div>
                       ) : null}
@@ -249,37 +318,32 @@ export function EntryForm() {
             <tfoot>
               <tr style={{ background: 'var(--panel)', borderTop: '2px solid var(--navy)' }}>
                 <td style={{ padding: '16px 14px' }} colSpan={2}>
-                  <SectionLabel>Weighted score · February</SectionLabel>
+                  <SectionLabel>Weighted score · {data.cycle.label}</SectionLabel>
                   <div style={{ fontSize: 13, color: 'var(--grey-body)', marginTop: 3 }}>
                     Sum of weight × achievement across 100% of KRAs
                   </div>
                 </td>
                 <td style={{ padding: '16px 10px', textAlign: 'right' }} colSpan={2}>
-                  <div
-                    className="num"
-                    style={{
-                      fontSize: 34,
-                      fontWeight: 600,
-                      color: 'var(--navy)',
-                      lineHeight: 1,
-                    }}
-                  >
+                  <div className="num" style={{ fontSize: 34, fontWeight: 600, color: 'var(--navy)', lineHeight: 1 }}>
                     {weighted === null ? '—' : weighted.toFixed(1)}
                   </div>
                 </td>
                 <td style={{ padding: '16px 10px', textAlign: 'right' }} colSpan={2}>
-                  <div
-                    className="stack"
-                    style={{ alignItems: 'flex-end', gap: 10 }}
-                  >
-                    {blocked ? (
+                  <div className="stack" style={{ alignItems: 'flex-end', gap: 10 }}>
+                    {saveError ? (
                       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--red)' }}>
-                        {blockedMessage}
+                        {saveError}
+                      </div>
+                    ) : check.blocked ? (
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--red)' }}>
+                        {check.missingActuals > 0
+                          ? `${check.missingActuals} actual${check.missingActuals === 1 ? '' : 's'} still to enter`
+                          : `${check.missingNotes} context note${check.missingNotes === 1 ? '' : 's'} required before submitting`}
                       </div>
                     ) : (
                       <div style={{ fontSize: 13, color: 'var(--green)' }}>
                         {submitted
-                          ? 'February submitted'
+                          ? `${data.cycle.label} submitted`
                           : 'All exceptions explained — ready to submit'}
                       </div>
                     )}
@@ -288,17 +352,19 @@ export function EntryForm() {
                         type="button"
                         className="btn btn--secondary"
                         style={{ fontSize: 14.5, padding: '10px 18px' }}
+                        disabled={!editable || busy !== 'idle'}
+                        onClick={() => persist(false)}
                       >
-                        Save draft
+                        {busy === 'saving' ? 'Saving…' : 'Save draft'}
                       </button>
                       <button
                         type="button"
                         className="btn btn--primary"
                         style={{ fontSize: 14.5 }}
-                        disabled={blocked || submitted}
-                        onClick={() => setSubmitted(true)}
+                        disabled={!editable || check.blocked || busy !== 'idle'}
+                        onClick={() => persist(true)}
                       >
-                        Submit February
+                        {busy === 'submitting' ? 'Submitting…' : `Submit ${data.cycle.label.split(' ')[0]}`}
                       </button>
                     </div>
                   </div>
@@ -315,13 +381,11 @@ export function EntryForm() {
               <YearStrip
                 size="medium"
                 points={buildYear(member?.closed ?? [])}
-                label={`${ENTRY_SUBJECT.name}, twelve months`}
+                label={`${data.employee.name}, twelve months`}
               />
-              <div className="spread" style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
-                <span>{ENTRY_SUBJECT.monthsLogged} months logged</span>
-                <span className="num" style={{ color: 'var(--navy)', fontWeight: 700 }}>
-                  Avg {ENTRY_SUBJECT.average.toFixed(1)}
-                </span>
+              <div style={{ fontSize: 12.5, color: 'var(--grey-body)', lineHeight: 1.45 }}>
+                Historical months from the seeded record. Live once earlier cycles are
+                logged through the app.
               </div>
             </div>
           </Card>
@@ -342,16 +406,13 @@ export function EntryForm() {
                 Teams that already track in Excel can upload the monthly sheet instead —
                 same KRAs, same validation, same context-note rule.
               </div>
-              <Link
-                href="/performance-log/upload"
-                style={{ fontSize: 13.5, fontWeight: 700 }}
-              >
+              <Link href="/performance-log/upload" style={{ fontSize: 13.5, fontWeight: 700 }}>
                 Switch to spreadsheet upload
               </Link>
             </div>
           </Card>
         </div>
       </div>
-    </div>
+    </>,
   );
 }

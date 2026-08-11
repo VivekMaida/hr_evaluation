@@ -1,0 +1,369 @@
+// M3M Perform — pilot schema.
+//
+// The shape follows the design document: a published KPI set carries weights and
+// monthly targets, leads log actuals against them each cycle, the cycle locks,
+// and everything that touches the record is stamped with who did it and why.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Pooled connection for the app; migrations need the direct one.
+  url       = env("m3m_internal_tools_DATABASE_URL")
+  directUrl = env("m3m_internal_tools_DATABASE_URL_UNPOOLED")
+}
+
+// ---------------------------------------------------------------------------
+// People and access
+// ---------------------------------------------------------------------------
+
+enum Role {
+  EMPLOYEE
+  LEAD
+  HR
+}
+
+model Department {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  headName  String?
+  employees Employee[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Employee {
+  /// The M3M employee number, e.g. EMP-10233. Used everywhere as the identifier
+  /// because names repeat — there are three Rohit Vermas.
+  id           String     @id
+  name         String
+  title        String
+  location     String?
+  joinedOn     DateTime?
+  active       Boolean    @default(true)
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+
+  /// The lead this person reports to. Self-relation: a lead is an Employee too.
+  leadId String?
+  lead   Employee?  @relation("TeamMembers", fields: [leadId], references: [id])
+  team   Employee[] @relation("TeamMembers")
+
+  user             User?
+  kpis             Kpi[]
+  entries          MonthlyEntry[]
+  submissions      Submission[]
+  annualReviews    AnnualReview[]
+  exceptionsRaised ExceptionRequest[] @relation("ExceptionSubject")
+  activity         ActivityLog[]      @relation("ActivitySubject")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([leadId])
+  @@index([departmentId])
+}
+
+model User {
+  id    String @id @default(cuid())
+  email String @unique
+  role  Role   @default(LEAD)
+
+  /// Null until the person sets a password on first login. Seeded users start
+  /// null: HR creates the account, the employee chooses the secret.
+  passwordHash    String?
+  mustSetPassword Boolean   @default(true)
+  lastLoginAt     DateTime?
+
+  employeeId String   @unique
+  employee   Employee @relation(fields: [employeeId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// The KPI master and the monthly cycle
+// ---------------------------------------------------------------------------
+
+/// A month in a financial year. Nothing can be logged against a cycle that is
+/// not OPEN; nothing can be edited once it is LOCKED.
+enum CycleState {
+  FUTURE
+  OPEN
+  LOCKED
+}
+
+model Cycle {
+  id String @id @default(cuid())
+
+  /// Financial year label, e.g. "2025-26".
+  fiscalYear String
+  /// 1 = April, 12 = March. The year strip always renders all twelve.
+  monthIndex Int
+  /// Display label, e.g. "February 2026".
+  label      String
+
+  state    CycleState @default(FUTURE)
+  opensOn  DateTime?
+  locksOn  DateTime?
+  lockedAt DateTime?
+
+  entries     MonthlyEntry[]
+  submissions Submission[]
+  uploads     UploadBatch[]
+  activity    ActivityLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([fiscalYear, monthIndex])
+  @@index([state])
+}
+
+/// One key result area for one employee for one financial year. Weights across
+/// an employee's KPIs sum to 100.
+model Kpi {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  fiscalYear String
+  name       String
+  /// Unit and provenance, shown under the name on the entry form.
+  basis      String
+  unit       String?
+
+  weight Decimal @db.Decimal(5, 2)
+  target Decimal @db.Decimal(14, 2)
+
+  /// TAT and escalation KPIs invert the achievement maths: target / actual.
+  lowerIsBetter Boolean @default(false)
+  sortOrder     Int     @default(0)
+
+  entries MonthlyEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([employeeId, fiscalYear, name])
+  @@index([employeeId, fiscalYear])
+}
+
+/// One actual, for one KPI, in one cycle. This is the row a lead types into.
+model MonthlyEntry {
+  id String @id @default(cuid())
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  cycleId    String
+  cycle      Cycle    @relation(fields: [cycleId], references: [id])
+  kpiId      String
+  kpi        Kpi      @relation(fields: [kpiId], references: [id], onDelete: Cascade)
+
+  actual Decimal? @db.Decimal(14, 2)
+
+  /// Required when achievement lands outside 70–120%. Carried into the annual
+  /// review verbatim — this is the evidence the appraisal is built on.
+  contextNote String?
+
+  /// Snapshot of achievement at save time, so a later target correction cannot
+  /// silently rewrite history.
+  achievement Decimal? @db.Decimal(7, 2)
+
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@unique([kpiId, cycleId])
+  @@index([employeeId, cycleId])
+}
+
+enum SubmissionState {
+  DRAFT
+  SUBMITTED
+  SUPERSEDED
+}
+
+enum EntrySource {
+  FORM
+  UPLOAD
+}
+
+/// A lead committing an employee's month. Superseded rather than overwritten,
+/// so the history of what was claimed when survives.
+model Submission {
+  id String @id @default(cuid())
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  cycleId    String
+  cycle      Cycle    @relation(fields: [cycleId], references: [id])
+
+  weightedScore Decimal?        @db.Decimal(7, 2)
+  state         SubmissionState @default(DRAFT)
+  source        EntrySource     @default(FORM)
+
+  submittedAt   DateTime?
+  submittedById String?
+
+  supersedesId String?     @unique
+  supersedes   Submission? @relation("SubmissionChain", fields: [supersedesId], references: [id])
+  supersededBy Submission? @relation("SubmissionChain")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([employeeId, cycleId, state])
+  @@index([cycleId, state])
+}
+
+// ---------------------------------------------------------------------------
+// The annual rating
+// ---------------------------------------------------------------------------
+
+enum ReviewState {
+  NOT_STARTED
+  DRAFT
+  SUBMITTED
+  CALIBRATED
+}
+
+model AnnualReview {
+  id String @id @default(cuid())
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  fiscalYear String
+
+  yearAverage  Decimal? @db.Decimal(7, 2)
+  monthsLogged Int      @default(0)
+
+  /// 1–5. impliedBand comes from the record; chosenBand is the lead's call.
+  impliedBand Int?
+  chosenBand  Int?
+
+  /// Required when chosenBand is two or more bands from impliedBand.
+  justification    String?
+  reviewerComment  String?
+
+  state         ReviewState @default(NOT_STARTED)
+  submittedAt   DateTime?
+  submittedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([employeeId, fiscalYear])
+}
+
+// ---------------------------------------------------------------------------
+// Things that need a human decision
+// ---------------------------------------------------------------------------
+
+enum RequestState {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ExceptionType {
+  BACK_ENTRY
+  WEIGHT_CHANGE
+  TARGET_RESET
+  OTHER
+}
+
+model ExceptionRequest {
+  id String @id @default(cuid())
+
+  employeeId String
+  employee   Employee @relation("ExceptionSubject", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  type   ExceptionType
+  detail String
+
+  raisedById String
+  raisedAt   DateTime @default(now())
+
+  state        RequestState @default(PENDING)
+  decidedById  String?
+  decidedAt    DateTime?
+  decisionNote String?
+
+  @@index([state])
+}
+
+/// Locked months cannot be edited by leads. To change a figure, raise one of
+/// these; HR reviews it and the change is stamped with who asked and who approved.
+model CorrectionRequest {
+  id String @id @default(cuid())
+
+  monthlyEntryId String
+  reason         String
+
+  previousValue Decimal? @db.Decimal(14, 2)
+  proposedValue Decimal? @db.Decimal(14, 2)
+
+  raisedById String
+  raisedAt   DateTime @default(now())
+
+  state        RequestState @default(PENDING)
+  decidedById  String?
+  decidedAt    DateTime?
+  decisionNote String?
+
+  @@index([state])
+  @@index([monthlyEntryId])
+}
+
+// ---------------------------------------------------------------------------
+// Spreadsheet route and audit trail
+// ---------------------------------------------------------------------------
+
+model UploadBatch {
+  id String @id @default(cuid())
+
+  cycleId String
+  cycle   Cycle  @relation(fields: [cycleId], references: [id])
+
+  fileName      String
+  uploadedById  String
+  uploadedAt    DateTime @default(now())
+
+  rowsTotal     Int @default(0)
+  rowsCommitted Int @default(0)
+  rowsRejected  Int @default(0)
+
+  /// Per-row rejection reasons, kept so the error report can be re-downloaded.
+  rejections Json?
+  committedAt DateTime?
+
+  @@index([cycleId])
+}
+
+/// Every write to the record. What makes a locked month evidence rather than a
+/// working document.
+model ActivityLog {
+  id String @id @default(cuid())
+
+  at      DateTime @default(now())
+  actorId String?
+
+  employeeId String?
+  employee   Employee? @relation("ActivitySubject", fields: [employeeId], references: [id])
+  cycleId    String?
+  cycle      Cycle?    @relation(fields: [cycleId], references: [id])
+
+  /// e.g. ENTRY_SAVED, MONTH_SUBMITTED, UPLOAD_COMMITTED, RATING_SUBMITTED.
+  kind    String
+  summary String
+  meta    Json?
+
+  @@index([at])
+  @@index([employeeId])
+  @@index([kind])
+}

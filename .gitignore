@@ -11,3 +11,6 @@ npm-debug.log*
 
 # Per-machine Claude Code state — local paths and permission grants.
 .claude/settings.local.json
+
+.vercel
+.env*

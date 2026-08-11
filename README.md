@@ -23,11 +23,21 @@ Requires Node.js 20 or newer. Verified on Node 24.19.0 / npm 11.17.0.
 npm install
 ```
 
+Copy the Neon and Auth.js variables into `.env.local`, then:
+
+```bash
+npm run db:deploy
+```
+
+```bash
+npm run db:seed
+```
+
 ```bash
 npm run dev
 ```
 
-Then open http://localhost:3000.
+Then open http://localhost:3000. You'll land on `/login`.
 
 `dev` runs Turbopack. Next.js compiles each route the first time you open it, so
 every screen is slow once — around 1–3 seconds — and fast on every visit after.
@@ -36,8 +46,57 @@ On this machine Defender's real-time scanning of `node_modules` is what makes th
 first compile expensive; Turbopack cut the worst route from 9s to 1.3s. Drop the
 `--turbopack` flag in `package.json` if you ever need to compare against webpack.
 
-`npm run build && npm start` gives production speed — every route below except
-`/reviews/[employeeId]` is prerendered as static HTML.
+`npm run build && npm start` gives production speed.
+
+## Data and accounts
+
+Postgres on Neon, via Prisma. **Pinned to Prisma 6** deliberately: Prisma 7
+removed `url`/`directUrl` from `schema.prisma` and requires a `prisma.config.ts`
+plus a driver adapter. Upgrading means restructuring that, not bumping a version.
+
+Both connection URLs are required — the pooled one for the app, the direct one
+for migrations, which fail against the pooler:
+
+```
+m3m_internal_tools_DATABASE_URL           # pooled
+m3m_internal_tools_DATABASE_URL_UNPOOLED  # direct, migrations only
+AUTH_SECRET                               # Auth.js session signing
+```
+
+Prisma's CLI reads `.env`, not `.env.local`, so every `db:*` script goes through
+`dotenv-cli`. Use those scripts rather than calling `prisma` directly.
+
+| Script | Does |
+| --- | --- |
+| `npm run db:migrate` | New migration from schema changes (development) |
+| `npm run db:deploy` | Apply existing migrations (deployment) |
+| `npm run db:seed` | Idempotent — departments, employees, users, 12 cycles, KPI set |
+| `npm run db:studio` | Browse the data |
+
+**Accounts.** The seed creates users with **no password**. Each person sets their
+own on first sign-in: type the password you want and the account is yours.
+Nobody self-registers — an email with no seeded account cannot get in.
+
+The trade-off: whoever signs in first claims an account. Acceptable for a closed
+pilot on an invite-only list; not acceptable for general rollout. Replace with
+SSO before widening beyond the pilot.
+
+Passwords are bcrypt-hashed at 12 rounds and never stored in plain text.
+
+### Loading the real KPI master
+
+`KPI_TEMPLATE` in `prisma/seed.ts` is still the prototype's five Sales KRAs
+applied to everyone. Replace it — and the roster above it — with HR's actual
+sheet. The seed asserts weights sum to 100 and will refuse to run otherwise.
+
+## Deploying to Vercel
+
+Set these in the Vercel project: both Neon URLs and `AUTH_SECRET`. Run
+`npm run db:deploy` against the database once. `postinstall` runs
+`prisma generate`, so the client is built during deployment.
+
+Do **not** reintroduce SQLite or any local file for data — Vercel's filesystem
+is ephemeral and resets on every deployment.
 
 ## What is here
 
@@ -54,42 +113,28 @@ first compile expensive; Turbopack cut the worst route from 9s to 1.3s. Drop the
 | `/reports` | Screen 06 | Consistency analysis and rating spread by lead. |
 | `/my-team`, `/calibration`, `/admin`, `/activity` | — | In the IA, not drawn in round 1. |
 
-The role switch at the foot of the sidebar is a prototype affordance, not part
-of the shipped IA — it stands in for authentication.
+**Only `/performance-log` reads and writes the database.** Home, Scorecard,
+Reviews and Reports still render the fixtures in `lib/*-data.ts`. They are
+design-accurate but not yet live — porting them is the next piece of work.
 
-## Deploying to GitHub Pages
+The role switch at the foot of the sidebar is left over from the prototype and
+now disagrees with the signed-in user. Remove it once the remaining screens read
+from the session.
 
-`.github/workflows/deploy.yml` builds and publishes on every push to `main`.
-In the repo, set **Settings → Pages → Source** to **GitHub Actions** once; after
-that it is automatic. The site lands at `https://<user>.github.io/<repo>/`.
+## Superseded: GitHub Pages
 
-> **Pages from a private repo requires GitHub Pro, Team or Enterprise.** On a
-> free account the workflow runs but the site never becomes reachable. Either
-> upgrade the plan or make the repo public — and read the note on contents in
-> the section above before choosing public.
+The app was briefly a static export deployed to GitHub Pages. That is gone: an
+app that saves data needs a server, so `output: 'export'` and the Pages workflow
+were both removed in favour of Vercel.
 
-The app is a static export (`output: 'export'`), so there is no server at
-runtime. Two consequences worth knowing:
+Two leftovers still in the tree, harmless and useful if the app is ever hosted
+under a subpath again:
 
-- **Every linked employee id must be prebuilt.** `LINKED_EMPLOYEE_IDS` in
-  `lib/scorecard-data.ts` feeds `generateStaticParams` for both
-  `/scorecard/[employeeId]` and `/reviews/[employeeId]`. Add an employee to the
-  fixtures without adding them there and their row will 404 on Pages while
-  working fine under `npm run dev`.
-- **Pages serves from a `/<repo>` subpath.** `next/link` picks that up from
-  `basePath` automatically, but `next/image` with `unoptimized: true` does not —
-  anything pointing at a file in `public/` must go through `asset()` in
-  `lib/base-path.ts`. The workflow sets `NEXT_PUBLIC_BASE_PATH` from the repo
-  name; locally it is empty, so `npm run dev` is unaffected.
-
-To reproduce a Pages build locally:
-
-```bash
-NEXT_PUBLIC_BASE_PATH=/your-repo-name npm run build
-```
-
-That writes `out/`. Serving it from a directory of that name reproduces the
-deployed URL structure exactly.
+- `LINKED_EMPLOYEE_IDS` in `lib/scorecard-data.ts` still drives
+  `generateStaticParams` for `/scorecard/[employeeId]` and
+  `/reviews/[employeeId]`, so those pages prerender.
+- `asset()` in `lib/base-path.ts` prefixes `public/` assets with
+  `NEXT_PUBLIC_BASE_PATH`. Unset, it is a no-op.
 
 ## Layout
 
