@@ -133,40 +133,31 @@
   color: rgba(255, 255, 255, 0.6);
 }
 
-/* Prototype affordance — not part of the shipped IA. */
-.roleSwitch {
-  margin: 10px 14px 0;
-  display: flex;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: var(--radius);
-  overflow: hidden;
+.user:hover {
+  background: rgba(255, 255, 255, 0.14);
+  text-decoration: none;
 }
 
-.roleSwitchOption {
-  flex: 1;
+.signOut {
+  margin: 8px 14px 0;
+}
+
+.signOutButton {
+  width: 100%;
   font-family: inherit;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.6);
   background: none;
-  border: none;
-  padding: 6px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius);
+  padding: 7px 4px;
   cursor: pointer;
 }
 
-.roleSwitchOption:hover {
+.signOutButton:hover {
   color: var(--white);
   background: rgba(255, 255, 255, 0.08);
-}
-
-.roleSwitchActive {
-  color: var(--navy);
-  background: var(--white);
-}
-
-.roleSwitchActive:hover {
-  color: var(--navy);
-  background: var(--white);
 }

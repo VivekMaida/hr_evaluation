@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { auth } from '@/auth';
 import { AppShell } from '@/components/AppShell';
-import { RoleProvider } from '@/components/RoleContext';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -10,7 +10,9 @@ export const metadata: Metadata = {
     'Monthly performance logging, scorecards and annual reviews for M3M India.',
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const session = await auth();
+
   return (
     <html lang="en-IN">
       <head>
@@ -24,9 +26,19 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         />
       </head>
       <body>
-        <RoleProvider>
-          <AppShell>{children}</AppShell>
-        </RoleProvider>
+        <AppShell
+          user={
+            session?.user
+              ? {
+                  name: session.user.name ?? session.user.email ?? 'Signed in',
+                  role: session.user.role,
+                  employeeId: session.user.employeeId,
+                }
+              : null
+          }
+        >
+          {children}
+        </AppShell>
       </body>
     </html>
   );

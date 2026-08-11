@@ -2,9 +2,16 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useRole } from './RoleContext';
-import { CURRENT_USER, FY_LABEL } from '@/lib/data';
+import { signOutAction } from '@/app/login/actions';
+import { FY_LABEL } from '@/lib/data';
+import type { Role } from '@/lib/types';
 import styles from './Sidebar.module.css';
+
+export type SessionUser = {
+  name: string;
+  role: Role;
+  employeeId: string;
+};
 
 type NavItem = {
   label: string;
@@ -32,10 +39,15 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function Sidebar() {
+const ROLE_LABEL: Record<Role, string> = {
+  HR: 'HR · Performance',
+  LEAD: 'Team Lead',
+  EMPLOYEE: 'Employee',
+};
+
+export function Sidebar({ user }: { user: SessionUser }) {
   const pathname = usePathname();
-  const { role, setRole } = useRole();
-  const user = CURRENT_USER[role];
+  const hr = user.role === 'HR';
 
   return (
     <nav className={styles.nav} aria-label="Primary">
@@ -65,7 +77,7 @@ export function Sidebar() {
 
       <div className={styles.groupSecondary}>
         {SECONDARY.map((item) =>
-          role === 'hr' ? (
+          hr ? (
             <Link
               key={item.href}
               href={item.href}
@@ -92,31 +104,16 @@ export function Sidebar() {
 
       <div className={styles.spacer} />
 
-      <div className={styles.user}>
+      <Link href="/account" className={styles.user} style={{ textDecoration: 'none' }}>
         <div className={styles.userName}>{user.name}</div>
-        <div className={styles.userRole}>{user.title}</div>
-      </div>
+        <div className={styles.userRole}>{ROLE_LABEL[user.role]}</div>
+      </Link>
 
-      <div className={styles.roleSwitch} role="group" aria-label="Preview as">
-        <button
-          type="button"
-          className={`${styles.roleSwitchOption} ${
-            role === 'lead' ? styles.roleSwitchActive : ''
-          }`}
-          onClick={() => setRole('lead')}
-        >
-          Lead
+      <form action={signOutAction} className={styles.signOut}>
+        <button type="submit" className={styles.signOutButton}>
+          Sign out
         </button>
-        <button
-          type="button"
-          className={`${styles.roleSwitchOption} ${
-            role === 'hr' ? styles.roleSwitchActive : ''
-          }`}
-          onClick={() => setRole('hr')}
-        >
-          HR
-        </button>
-      </div>
+      </form>
     </nav>
   );
 }

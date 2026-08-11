@@ -101,4 +101,5 @@ export type AnnualReview = {
   state: 'not-started' | 'draft' | 'submitted' | 'calibrated';
 };
 
-export type Role = 'lead' | 'hr';
+/** Mirrors the Prisma `Role` enum. */
+export type Role = 'EMPLOYEE' | 'LEAD' | 'HR';

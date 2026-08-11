@@ -3,6 +3,7 @@ import Credentials from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
+import { authConfig } from './auth.config';
 import type { Role } from '@prisma/client';
 
 declare module 'next-auth' {
@@ -29,9 +30,7 @@ const credentialsSchema = z.object({
 const BCRYPT_ROUNDS = 12;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  session: { strategy: 'jwt' },
-  pages: { signIn: '/login' },
-  trustHost: true,
+  ...authConfig,
 
   providers: [
     Credentials({
@@ -87,6 +86,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
 
   callbacks: {
+    // Spreading authConfig replaces its callbacks wholesale, so carry the
+    // edge-side `authorized` check through explicitly.
+    ...authConfig.callbacks,
+
     jwt({ token, user }) {
       if (user) {
         token.role = user.role;
