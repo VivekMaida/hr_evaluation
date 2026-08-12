@@ -60,6 +60,7 @@ model Employee {
   exceptionsRaised ExceptionRequest[] @relation("ExceptionSubject")
   activity         ActivityLog[]      @relation("ActivitySubject")
   acknowledgements Acknowledgement[]
+  queries          MonthQuery[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -118,6 +119,7 @@ model Cycle {
   uploads          UploadBatch[]
   activity         ActivityLog[]
   acknowledgements Acknowledgement[]
+  queries          MonthQuery[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -199,6 +201,34 @@ model Acknowledgement {
 
   @@unique([employeeId, cycleId])
   @@index([employeeId])
+}
+
+enum QueryState {
+  OPEN
+  ANSWERED
+}
+
+/// An employee asking about a specific month's record. Routes to their
+/// manager, not HR — both the question and the answer are the evidence trail,
+/// same reasoning as MonthlyEntry.contextNote.
+model MonthQuery {
+  id String @id @default(cuid())
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  cycleId    String
+  cycle      Cycle    @relation(fields: [cycleId], references: [id])
+
+  question String
+  askedAt  DateTime @default(now())
+
+  state         QueryState @default(OPEN)
+  response      String?
+  respondedById String?
+  respondedAt   DateTime?
+
+  @@index([employeeId])
+  @@index([state])
 }
 
 enum SubmissionState {

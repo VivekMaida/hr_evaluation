@@ -1,3 +1,4 @@
+import { getContextNotes, type ContextNote } from './context-notes';
 import { prisma } from './db';
 import { getEmployeeCycleScores, monthsLogged as countMonthsLogged, pointsFromCycleScores, yearAverage as computeYearAverage } from './employee-year';
 import type { MonthPoint } from './types';
@@ -49,12 +50,7 @@ export const REVIEW_CONTEXT = {
   position: 'Employee 3 of 7',
 };
 
-export type ContextNote = {
-  when: string;
-  headline: string;
-  tone: 'green' | 'red';
-  body: string;
-};
+export type { ContextNote };
 
 export type ReviewSubject = {
   id: string;
@@ -94,29 +90,7 @@ export async function getReviewData(employeeId: string): Promise<ReviewData | nu
   const above120 = scores.filter((s) => s.weightedScore !== null && s.weightedScore > 120).length;
   const below70 = scores.filter((s) => s.weightedScore !== null && s.weightedScore < 70).length;
 
-  const notedEntries = await prisma.monthlyEntry.findMany({
-    where: {
-      employeeId,
-      contextNote: { not: null },
-      cycle: { fiscalYear: FISCAL_YEAR },
-    },
-    include: { cycle: true, kpi: true },
-    orderBy: { cycle: { monthIndex: 'asc' } },
-  });
-
-  const contextNotes: ContextNote[] = notedEntries
-    .filter((e) => (e.contextNote ?? '').trim().length > 0)
-    .map((e) => {
-      const achievement = e.achievement === null ? null : Number(e.achievement);
-      const tone: ContextNote['tone'] = achievement !== null && achievement > 100 ? 'green' : 'red';
-      const achievementLabel = achievement === null ? '' : ` ${achievement.toFixed(0)}%`;
-      return {
-        when: `${e.cycle.label} · ${e.kpi.name}${achievementLabel}`,
-        headline: e.cycle.label,
-        tone,
-        body: e.contextNote as string,
-      };
-    });
+  const contextNotes = await getContextNotes(employeeId, FISCAL_YEAR);
 
   const subject: ReviewSubject = {
     id: employee.id,

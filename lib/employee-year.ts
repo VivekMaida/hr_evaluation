@@ -65,6 +65,18 @@ export function pointsFromCycleScores(scores: CycleScore[]): MonthPoint[] {
   });
 }
 
+/**
+ * For the employee self-service 'after-lock' visibility policy: discards
+ * whatever the still-open cycle carries, real or not, so it reads as not yet
+ * available rather than showing a manager's in-progress or just-submitted
+ * number. The caller decides whether that policy applies — this is generic
+ * and used by other callers (Profile, LeadHome, TeamRail) that must never
+ * have it applied.
+ */
+export function maskOpenCycle(scores: CycleScore[]): CycleScore[] {
+  return scores.map((s) => (s.state === 'OPEN' ? { ...s, weightedScore: null, submittedAt: null } : s));
+}
+
 export function monthsLogged(scores: CycleScore[]): number {
   return scores.filter((s) => s.weightedScore !== null).length;
 }

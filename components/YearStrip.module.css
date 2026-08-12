@@ -47,6 +47,13 @@
   overflow: visible;
 }
 
+/* The one month called out as "latest" — a ring, not a colour change, so the
+   band colours keep meaning what they mean. */
+.trackHighlighted {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
 .bar {
   position: absolute;
   left: 0;
@@ -74,6 +81,11 @@
 }
 
 .monthOpen {
+  color: var(--navy);
+  font-weight: 700;
+}
+
+.monthHighlighted {
   color: var(--navy);
   font-weight: 700;
 }

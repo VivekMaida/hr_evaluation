@@ -2,6 +2,7 @@ import { FY_LABEL } from './constants';
 import { prisma } from './db';
 import {
   getEmployeeCycleScores,
+  maskOpenCycle,
   monthsLogged as countMonthsLogged,
   pointsFromCycleScores,
   priorFiscalYear,
@@ -95,7 +96,8 @@ export type ScorecardSubject = {
   yearAverage: number;
   record?: {
     monthsLocked: number;
-    februaryState: string;
+    openMonthLabel: string;
+    currentMonthState: string;
     lastSubmitted: string;
     priorRating: string;
   };
@@ -114,8 +116,17 @@ function formatDate(d: Date | null): string {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-/** Returns null only when the employee does not exist. */
-export async function getScorecardData(employeeId: string): Promise<ScorecardData | null> {
+/**
+ * Returns null only when the employee does not exist.
+ *
+ * `maskOpenCycleData`: for the employee self-service 'after-lock' visibility
+ * policy — discards whatever the still-open cycle carries, real or not, so
+ * it reads as not yet available. Never set this for a Manager or HR view.
+ */
+export async function getScorecardData(
+  employeeId: string,
+  options: { maskOpenCycleData?: boolean } = {},
+): Promise<ScorecardData | null> {
   const employee = await prisma.employee.findUnique({
     where: { id: employeeId },
     include: { department: true, lead: true },
@@ -124,13 +135,14 @@ export async function getScorecardData(employeeId: string): Promise<ScorecardDat
 
   const base = { id: employee.id, name: employee.name, title: employee.title };
 
-  const [scores, kpis] = await Promise.all([
+  const [rawScores, kpis] = await Promise.all([
     getEmployeeCycleScores(employeeId, FISCAL_YEAR),
     prisma.kpi.findMany({
       where: { employeeId, fiscalYear: FISCAL_YEAR },
       orderBy: { sortOrder: 'asc' },
     }),
   ]);
+  const scores = options.maskOpenCycleData ? maskOpenCycle(rawScores) : rawScores;
 
   const months = countMonthsLogged(scores);
   if (months === 0) return { employee: base, subject: null };

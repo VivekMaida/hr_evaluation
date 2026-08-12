@@ -4,7 +4,8 @@ import { CoverageBar } from '@/components/CoverageBar';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { YearStrip } from '@/components/YearStrip';
 import { Card, Chip, SectionLabel } from '@/components/ui';
-import { FY_MONTHS } from '@/lib/types';
+import type { ContextNote } from '@/lib/context-notes';
+import type { LockedMonthRow } from '@/lib/locked-months';
 import {
   COVERAGE_BANDS,
   consistencyLabel,
@@ -14,6 +15,10 @@ import {
   type ScorecardSubject,
 } from '@/lib/scorecard';
 import { consistency, halves, signed, trend } from '@/lib/score';
+import { FY_MONTHS } from '@/lib/types';
+import { AcknowledgeButton } from './AcknowledgeButton';
+import { RaiseQueryForm } from './RaiseQueryForm';
+import { RespondToQueryForm } from './RespondToQueryForm';
 
 const MONTH_HEADS = FY_MONTHS.map((m) => m.toUpperCase());
 
@@ -48,7 +53,23 @@ function StatShell({
   );
 }
 
-export function Scorecard({ subject }: { subject: ScorecardSubject }) {
+export function Scorecard({
+  subject,
+  contextNotes = [],
+  lockedMonths = [],
+  own = false,
+  isManager = false,
+}: {
+  subject: ScorecardSubject;
+  /** The context notes a manager wrote on outlier months — read-only for everyone. */
+  contextNotes?: ContextNote[];
+  /** One row per locked month, for the acknowledge/query section. */
+  lockedMonths?: LockedMonthRow[];
+  /** Viewing your own record — shows the Acknowledge action and "raise a query". */
+  own?: boolean;
+  /** Viewing this person's own manager's record — shows "respond" on open queries. */
+  isManager?: boolean;
+}) {
   const band = coverageBand(subject.monthsLogged);
   const suppressed = band === 'insufficient';
   const sd = consistency(subject.points);
@@ -503,6 +524,109 @@ export function Scorecard({ subject }: { subject: ScorecardSubject }) {
               </span>
             ))}
           </div>
+        ) : null}
+
+        {contextNotes.length > 0 ? (
+          <Card tone="navy" style={{ padding: '20px 24px 22px' }}>
+            <SectionLabel tone="navy">Context notes from the year</SectionLabel>
+            <div className="stack" style={{ gap: 14, marginTop: 14 }}>
+              {contextNotes.map((note, i) => (
+                <div key={note.when} className="stack" style={{ gap: 14 }}>
+                  {i > 0 ? <div style={{ height: 1, background: 'var(--grey-surface)' }} /> : null}
+                  <div className="stack" style={{ gap: 3 }}>
+                    <div
+                      className="num"
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: note.tone === 'green' ? 'var(--green)' : 'var(--red)',
+                      }}
+                    >
+                      {note.when}
+                    </div>
+                    <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>{note.body}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        ) : null}
+
+        {lockedMonths.length > 0 ? (
+          <Card style={{ padding: '20px 24px 22px' }}>
+            <SectionLabel>Acknowledgements &amp; queries</SectionLabel>
+            <p style={{ margin: '6px 0 14px', fontSize: 13.5, color: 'var(--grey-body)', maxWidth: '80ch' }}>
+              {own
+                ? 'Acknowledging confirms you have seen a locked month. A query on a specific month goes to your manager, not HR.'
+                : 'What this person has confirmed seeing, and any questions raised against a specific month.'}
+            </p>
+            <table className="data-table" style={{ fontSize: 14 }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '9px 12px' }}>Month</th>
+                  <th className="is-num" style={{ padding: '9px 10px', width: 90 }}>
+                    Score
+                  </th>
+                  <th style={{ padding: '9px 12px', width: 170 }}>Acknowledged</th>
+                  <th style={{ padding: '9px 12px' }}>Queries</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lockedMonths.map((month) => (
+                  <tr key={month.cycleId}>
+                    <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--navy)' }}>
+                      {month.label}
+                    </td>
+                    <td className="is-num" style={{ padding: '10px 10px' }}>
+                      {month.weightedScore === null ? '—' : month.weightedScore.toFixed(1)}
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>
+                      {month.acknowledgedAtLabel ? (
+                        <Chip tone="green" tight>
+                          {month.acknowledgedAtLabel}
+                        </Chip>
+                      ) : own ? (
+                        <AcknowledgeButton cycleId={month.cycleId} />
+                      ) : (
+                        <Chip tone="grey" tight>
+                          Not yet
+                        </Chip>
+                      )}
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>
+                      {month.queries.map((q, i) => (
+                        <div
+                          key={q.id}
+                          className="stack"
+                          style={{ gap: 3, marginBottom: i < month.queries.length - 1 ? 12 : 0 }}
+                        >
+                          <div style={{ fontWeight: 700, color: 'var(--navy)' }}>{q.question}</div>
+                          <div className="num" style={{ fontSize: 12.5, color: 'var(--grey-body)' }}>
+                            Asked {q.askedAtLabel}
+                          </div>
+                          {q.state === 'ANSWERED' ? (
+                            <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>
+                              {q.response}{' '}
+                              <span className="num" style={{ color: 'var(--grey-body)', fontSize: 12.5 }}>
+                                · {q.respondedAtLabel}
+                              </span>
+                            </div>
+                          ) : isManager ? (
+                            <RespondToQueryForm queryId={q.id} />
+                          ) : (
+                            <Chip tone="amber" tight>
+                              Awaiting response
+                            </Chip>
+                          )}
+                        </div>
+                      ))}
+                      {own ? <RaiseQueryForm cycleId={month.cycleId} /> : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
         ) : null}
       </div>
     </>

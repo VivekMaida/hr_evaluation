@@ -24,7 +24,7 @@ const PRIMARY: NavItem[] = [
   { label: 'Home', href: '/' },
   { label: 'Performance Log', href: '/performance-log', visibleTo: ['MANAGER', 'HR'] },
   { label: 'Scorecard', href: '/scorecard' },
-  { label: 'Reviews', href: '/reviews' },
+  { label: 'Reviews', href: '/reviews', visibleTo: ['MANAGER', 'HR'] },
 ];
 
 const SECONDARY: NavItem[] = [

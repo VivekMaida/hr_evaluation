@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic';
 export default async function ReviewsPage() {
   const session = await auth();
   if (!session?.user) redirect('/login');
+  if (session.user.role === 'EMPLOYEE') forbidden();
 
   const employeeId = session.user.employeeId;
   if (!(await canAccessEmployee(session.user, employeeId, false))) forbidden();

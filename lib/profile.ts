@@ -1,4 +1,5 @@
 import type { Role } from '@prisma/client';
+import { getAcknowledgements, type AcknowledgementItem } from './acknowledgements';
 import { FY_LABEL, SHOW_PROFILE_RECORD } from './constants';
 import { prisma } from './db';
 import { getEmployeeCycleScores } from './employee-year';
@@ -52,11 +53,6 @@ export type KpiSet = {
   effectiveDateLabel: string | null;
 };
 
-export type AcknowledgementItem = {
-  cycleLabel: string;
-  acknowledgedAtLabel: string;
-};
-
 export type ProfileData = {
   identity: ProfileIdentity;
   thisCycle: ThisCycle;
@@ -92,14 +88,10 @@ export async function getProfileData(employeeId: string): Promise<ProfileData | 
   });
   if (!employee || !employee.user) return null;
 
-  const [scores, kpiRows, ackRows] = await Promise.all([
+  const [scores, kpiRows, acknowledgements] = await Promise.all([
     getEmployeeCycleScores(employeeId, FISCAL_YEAR),
     prisma.kpi.findMany({ where: { employeeId, fiscalYear: FISCAL_YEAR }, orderBy: { sortOrder: 'asc' } }),
-    prisma.acknowledgement.findMany({
-      where: { employeeId },
-      include: { cycle: true },
-      orderBy: { acknowledgedAt: 'desc' },
-    }),
+    getAcknowledgements(employeeId),
   ]);
 
   const fromIndex = eligibleFromMonthIndex(employee.joinedOn, FISCAL_YEAR);
@@ -135,15 +127,6 @@ export async function getProfileData(employeeId: string): Promise<ProfileData | 
       ? effectiveDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
       : null,
   };
-
-  const acknowledgements: AcknowledgementItem[] = ackRows.map((a) => ({
-    cycleLabel: a.cycle.label,
-    acknowledgedAtLabel: a.acknowledgedAt.toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    }),
-  }));
 
   let record: ProfileData['record'] = null;
   if (SHOW_PROFILE_RECORD) {

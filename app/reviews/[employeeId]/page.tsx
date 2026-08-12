@@ -18,6 +18,7 @@ export default async function ReviewForEmployeePage({
 
   const session = await auth();
   if (!session?.user) redirect('/login');
+  if (session.user.role === 'EMPLOYEE') forbidden();
   if (!(await canAccessEmployee(session.user, employeeId, false))) forbidden();
 
   const data = await getReviewData(employeeId);

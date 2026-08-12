@@ -1,0 +1,158 @@
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
+import { auth } from '@/auth';
+import { prisma } from '@/lib/db';
+
+export type ScorecardActionState = { error: string | null; ok: boolean };
+
+/** Self-only — an employee acknowledging their own locked month. */
+export async function acknowledgeMonth(
+  _prev: ScorecardActionState,
+  formData: FormData,
+): Promise<ScorecardActionState> {
+  const session = await auth();
+  if (!session?.user) return { error: 'Not signed in.', ok: false };
+
+  const cycleId = String(formData.get('cycleId') ?? '');
+  if (!cycleId) return { error: 'Bad request.', ok: false };
+
+  const cycle = await prisma.cycle.findUnique({ where: { id: cycleId } });
+  if (!cycle) return { error: 'No such cycle.', ok: false };
+  if (cycle.state !== 'LOCKED') {
+    return { error: 'Only a locked month can be acknowledged.', ok: false };
+  }
+
+  const employeeId = session.user.employeeId;
+
+  await prisma.$transaction([
+    prisma.acknowledgement.upsert({
+      where: { employeeId_cycleId: { employeeId, cycleId } },
+      update: {},
+      create: { employeeId, cycleId },
+    }),
+    prisma.activityLog.create({
+      data: {
+        actorId: employeeId,
+        employeeId,
+        cycleId,
+        kind: 'MONTH_ACKNOWLEDGED',
+        summary: `${cycle.label} acknowledged`,
+      },
+    }),
+  ]);
+
+  revalidatePath('/');
+  revalidatePath('/scorecard');
+  revalidatePath(`/scorecard/${employeeId}`);
+  revalidatePath(`/profile/${employeeId}`);
+  return { error: null, ok: true };
+}
+
+const raiseQuerySchema = z.object({
+  cycleId: z.string().min(1),
+  question: z.string().trim().min(1, 'Enter a question.').max(2000),
+});
+
+/** Self-only. Routes to the employee's own manager, never to HR. */
+export async function raiseQuery(
+  _prev: ScorecardActionState,
+  formData: FormData,
+): Promise<ScorecardActionState> {
+  const session = await auth();
+  if (!session?.user) return { error: 'Not signed in.', ok: false };
+
+  const parsed = raiseQuerySchema.safeParse({
+    cycleId: String(formData.get('cycleId') ?? ''),
+    question: String(formData.get('question') ?? ''),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check the form.', ok: false };
+
+  const cycle = await prisma.cycle.findUnique({ where: { id: parsed.data.cycleId } });
+  if (!cycle) return { error: 'No such cycle.', ok: false };
+
+  const employeeId = session.user.employeeId;
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: { leadId: true },
+  });
+  if (!employee?.leadId) {
+    return { error: 'You have no manager on record to route this to.', ok: false };
+  }
+
+  await prisma.$transaction([
+    prisma.monthQuery.create({
+      data: { employeeId, cycleId: parsed.data.cycleId, question: parsed.data.question },
+    }),
+    prisma.activityLog.create({
+      data: {
+        actorId: employeeId,
+        employeeId,
+        cycleId: parsed.data.cycleId,
+        kind: 'QUERY_RAISED',
+        summary: `Query raised on ${cycle.label}`,
+      },
+    }),
+  ]);
+
+  revalidatePath('/scorecard');
+  revalidatePath(`/scorecard/${employeeId}`);
+  return { error: null, ok: true };
+}
+
+const respondSchema = z.object({
+  queryId: z.string().min(1),
+  response: z.string().trim().min(1, 'Enter a response.').max(2000),
+});
+
+/** Manager-only, and only the employee's actual manager — not HR. */
+export async function respondToQuery(
+  _prev: ScorecardActionState,
+  formData: FormData,
+): Promise<ScorecardActionState> {
+  const session = await auth();
+  if (!session?.user) return { error: 'Not signed in.', ok: false };
+  if (session.user.role !== 'MANAGER') {
+    return { error: "Only this person's manager can respond.", ok: false };
+  }
+
+  const parsed = respondSchema.safeParse({
+    queryId: String(formData.get('queryId') ?? ''),
+    response: String(formData.get('response') ?? ''),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check the form.', ok: false };
+
+  const query = await prisma.monthQuery.findUnique({
+    where: { id: parsed.data.queryId },
+    include: { employee: { select: { leadId: true } }, cycle: true },
+  });
+  if (!query) return { error: 'No such query.', ok: false };
+  if (query.employee.leadId !== session.user.employeeId) {
+    return { error: "Only this person's manager can respond.", ok: false };
+  }
+
+  await prisma.$transaction([
+    prisma.monthQuery.update({
+      where: { id: parsed.data.queryId },
+      data: {
+        response: parsed.data.response,
+        state: 'ANSWERED',
+        respondedById: session.user.employeeId,
+        respondedAt: new Date(),
+      },
+    }),
+    prisma.activityLog.create({
+      data: {
+        actorId: session.user.employeeId,
+        employeeId: query.employeeId,
+        cycleId: query.cycleId,
+        kind: 'QUERY_ANSWERED',
+        summary: `Query on ${query.cycle.label} answered by ${session.user.name ?? 'their manager'}`,
+      },
+    }),
+  ]);
+
+  revalidatePath(`/scorecard/${query.employeeId}`);
+  return { error: null, ok: true };
+}

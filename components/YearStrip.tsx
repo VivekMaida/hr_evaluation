@@ -69,9 +69,11 @@ type Props = {
   size?: StripSize;
   /** Names the strip for screen readers, e.g. "Kavita Nair, FY 2025–26". */
   label: string;
+  /** Rings one month — e.g. the latest locked month on the employee's own Home. */
+  highlightMonth?: MonthPoint['month'];
 };
 
-export function YearStrip({ points, size = 'large', label }: Props) {
+export function YearStrip({ points, size = 'large', label, highlightMonth }: Props) {
   const spec = SIZES[size];
   const targetOffset = (100 / STRIP_CEILING) * spec.track;
 
@@ -92,6 +94,7 @@ export function YearStrip({ points, size = 'large', label }: Props) {
     >
       {points.map((point) => {
         const scored = point.status === 'scored' && typeof point.score === 'number';
+        const highlighted = point.month === highlightMonth;
         return (
           <div key={point.month} className={styles.column}>
             {spec.showScores ? (
@@ -104,7 +107,9 @@ export function YearStrip({ points, size = 'large', label }: Props) {
             ) : null}
 
             <div
-              className={`${styles.track} ${TRACK_CLASS[point.status]}`}
+              className={`${styles.track} ${TRACK_CLASS[point.status]} ${
+                highlighted ? styles.trackHighlighted : ''
+              }`}
               style={{ width: `${spec.bar}px`, height: `${spec.track}px` }}
             >
               {scored ? (
@@ -125,7 +130,7 @@ export function YearStrip({ points, size = 'large', label }: Props) {
               <div
                 className={`${styles.month} ${
                   point.status === 'open' ? styles.monthOpen : ''
-                }`}
+                } ${highlighted ? styles.monthHighlighted : ''}`}
               >
                 {spec.showMonths === 'initial' ? point.month.charAt(0) : point.month}
               </div>
