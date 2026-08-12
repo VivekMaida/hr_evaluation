@@ -22,7 +22,7 @@ const ROUTE_RULES: { path: string; roles: Role[] }[] = [
   { path: '/my-team', roles: ['MANAGER'] },
   { path: '/performance-log', roles: ['MANAGER', 'HR'] },
   { path: '/scorecard', roles: ALL },
-  { path: '/reviews', roles: ['MANAGER', 'HR'] },
+  { path: '/reviews', roles: ALL },
   { path: '/calibration', roles: ['HR'] },
   { path: '/reports', roles: ['HR'] },
   { path: '/admin', roles: ['HR'] },

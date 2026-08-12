@@ -1,3 +1,4 @@
+import type { ReviewState } from '@prisma/client';
 import { getContextNotes, type ContextNote } from './context-notes';
 import { prisma } from './db';
 import { getEmployeeCycleScores, monthsLogged as countMonthsLogged, pointsFromCycleScores, yearAverage as computeYearAverage } from './employee-year';
@@ -68,10 +69,37 @@ export type ReviewSubject = {
   };
 };
 
+/**
+ * The lead's decision on this year's rating — separate from ReviewSubject,
+ * which is the record the decision is made against. A missing AnnualReview
+ * row reads the same as NOT_STARTED; nothing has been decided yet either way.
+ */
+export type ReviewRecord = {
+  state: ReviewState;
+  chosenBand: number | null;
+  justification: string | null;
+  reviewerComment: string | null;
+  submittedAtLabel: string | null;
+};
+
+const NOT_STARTED: ReviewRecord = {
+  state: 'NOT_STARTED',
+  chosenBand: null,
+  justification: null,
+  reviewerComment: null,
+  submittedAtLabel: null,
+};
+
+/** An employee's own rating is visible only once a lead (or HR) has finalized it. */
+export function isFinalized(state: ReviewState): boolean {
+  return state === 'SUBMITTED' || state === 'CALIBRATED';
+}
+
 export type ReviewData = {
   employee: { id: string; name: string; title: string };
   /** null means the employee exists but has nothing submitted yet. */
   subject: ReviewSubject | null;
+  review: ReviewRecord;
 };
 
 /** Returns null only when the employee does not exist. */
@@ -79,11 +107,30 @@ export async function getReviewData(employeeId: string): Promise<ReviewData | nu
   const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
   if (!employee) return null;
 
+  const annualReview = await prisma.annualReview.findUnique({
+    where: { employeeId_fiscalYear: { employeeId, fiscalYear: FISCAL_YEAR } },
+  });
+  const review: ReviewRecord = annualReview
+    ? {
+        state: annualReview.state,
+        chosenBand: annualReview.chosenBand,
+        justification: annualReview.justification,
+        reviewerComment: annualReview.reviewerComment,
+        submittedAtLabel: annualReview.submittedAt
+          ? annualReview.submittedAt.toLocaleDateString('en-IN', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            })
+          : null,
+      }
+    : NOT_STARTED;
+
   const base = { id: employee.id, name: employee.name, title: employee.title };
 
   const scores = await getEmployeeCycleScores(employeeId, FISCAL_YEAR);
   const months = countMonthsLogged(scores);
-  if (months === 0) return { employee: base, subject: null };
+  if (months === 0) return { employee: base, subject: null, review };
 
   const points = pointsFromCycleScores(scores);
   const average = computeYearAverage(scores) as number;
@@ -108,5 +155,5 @@ export async function getReviewData(employeeId: string): Promise<ReviewData | nu
     },
   };
 
-  return { employee: base, subject };
+  return { employee: base, subject, review };
 }

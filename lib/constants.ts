@@ -19,7 +19,8 @@ export const SHOW_PROFILE_RECORD = false;
 
 /**
  * Gates the whole employee self-service surface: Home's own-record view,
- * Scorecard's own-record view, Acknowledge, and Raise a query.
+ * Scorecard's own-record view, Acknowledge, Raise a query, and Reviews'
+ * own-record view (their finalized annual rating).
  *
  * - 'hidden'     — none of it. An employee signing in sees Profile only.
  * - 'after-lock' — visible, but the current OPEN month is withheld until its
@@ -28,7 +29,10 @@ export const SHOW_PROFILE_RECORD = false;
  *
  * Historical LOCKED months are always fully visible once this isn't 'hidden'
  * — the after-lock/immediate difference only ever affects the one open month.
- * This does not affect what a Manager or HR sees; they always see everything.
+ * It has no bearing on Reviews, which gates on the AnnualReview's own state
+ * instead (see lib/reviews.ts's isFinalized) — an employee never sees a draft
+ * rating regardless of this flag. This does not affect what a Manager or HR
+ * sees; they always see everything.
  */
 export type EmployeeRecordVisibility = 'hidden' | 'after-lock' | 'immediate';
 export const EMPLOYEE_RECORD_VISIBILITY: EmployeeRecordVisibility = 'hidden';

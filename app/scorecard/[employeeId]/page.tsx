@@ -4,7 +4,12 @@ import { EmptyState } from '@/components/EmptyState';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Scorecard } from '@/components/scorecard/Scorecard';
 import { canAccessEmployee } from '@/lib/access';
+import { EMPLOYEE_RECORD_VISIBILITY } from '@/lib/constants';
+import { getContextNotes } from '@/lib/context-notes';
+import { getLockedMonthRows } from '@/lib/locked-months';
 import { getScorecardData } from '@/lib/scorecard';
+
+const FISCAL_YEAR = '2025-26';
 
 export const metadata = { title: 'Scorecard · M3M Perform' };
 export const dynamic = 'force-dynamic';
@@ -20,7 +25,22 @@ export default async function ScorecardPage({
   if (!session?.user) redirect('/login');
   if (!(await canAccessEmployee(session.user, employeeId, false))) forbidden();
 
-  const data = await getScorecardData(employeeId);
+  const own = employeeId === session.user.employeeId;
+  // Only this person's actual manager gets to respond to a query here — HR
+  // can see everything on this page but the reply routes to the manager.
+  const isManager = session.user.role === 'MANAGER' && !own;
+
+  // The visibility flag only ever gates an EMPLOYEE looking at their own
+  // record; it never affects what a manager or HR sees of someone else.
+  const isEmployeeOwnRecord = own && session.user.role === 'EMPLOYEE';
+  if (isEmployeeOwnRecord && EMPLOYEE_RECORD_VISIBILITY === 'hidden') redirect('/profile');
+  const maskOpenCycleData = isEmployeeOwnRecord && EMPLOYEE_RECORD_VISIBILITY === 'after-lock';
+
+  const [data, contextNotes, lockedMonths] = await Promise.all([
+    getScorecardData(employeeId, { maskOpenCycleData }),
+    getContextNotes(employeeId, FISCAL_YEAR),
+    getLockedMonthRows(employeeId, FISCAL_YEAR),
+  ]);
   if (!data) notFound();
 
   if (!data.subject) {
@@ -36,5 +56,13 @@ export default async function ScorecardPage({
     );
   }
 
-  return <Scorecard subject={data.subject} />;
+  return (
+    <Scorecard
+      subject={data.subject}
+      contextNotes={contextNotes}
+      lockedMonths={lockedMonths}
+      own={own}
+      isManager={isManager}
+    />
+  );
 }

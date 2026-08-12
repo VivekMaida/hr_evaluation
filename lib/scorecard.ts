@@ -206,13 +206,16 @@ export async function getScorecardData(
   subject.weightedByMonth = lockedScores.map((s) => s.weightedScore);
 
   const openScore = scores.find((s) => s.state === 'OPEN');
-  const openEntries = openScore
-    ? await prisma.monthlyEntry.count({
-        where: { employeeId, cycleId: openScore.cycleId, actual: { not: null } },
-      })
-    : 0;
-  const februaryState =
-    openScore?.weightedScore !== null && openScore?.weightedScore !== undefined
+  const openMonthLabel = openScore?.label.split(' ')[0] ?? 'This month';
+  const openEntries =
+    options.maskOpenCycleData || !openScore
+      ? 0
+      : await prisma.monthlyEntry.count({
+          where: { employeeId, cycleId: openScore.cycleId, actual: { not: null } },
+        });
+  const currentMonthState = options.maskOpenCycleData
+    ? 'Not yet available'
+    : openScore?.weightedScore !== null && openScore?.weightedScore !== undefined
       ? 'Submitted'
       : openEntries > 0
         ? 'In progress'
@@ -232,7 +235,8 @@ export async function getScorecardData(
 
   subject.record = {
     monthsLocked,
-    februaryState,
+    openMonthLabel,
+    currentMonthState,
     lastSubmitted: formatDate(lastSubmittedAt),
     priorRating,
   };

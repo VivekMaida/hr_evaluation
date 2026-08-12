@@ -3,12 +3,22 @@ import { CoverageBar } from '@/components/CoverageBar';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { YearStrip } from '@/components/YearStrip';
 import { Card, Chip, SectionLabel } from '@/components/ui';
-import { BANDS, REVIEW_CONTEXT, impliedBand, type ReviewSubject } from '@/lib/reviews';
+import { BANDS, REVIEW_CONTEXT, impliedBand, type ReviewRecord, type ReviewSubject } from '@/lib/reviews';
 import { coverageBand, consistencyLabel, trendLabel } from '@/lib/scorecard';
 import { consistency, halves, signed, trend } from '@/lib/score';
 import { RatingCard } from './RatingCard';
+import { RatingSummary } from './RatingSummary';
 
-export function ReviewScreen({ subject: S }: { subject: ReviewSubject }) {
+export function ReviewScreen({
+  subject: S,
+  review,
+  own = false,
+}: {
+  subject: ReviewSubject;
+  review: ReviewRecord;
+  /** Viewing your own finalized rating — read-only, and no lead-queue chrome. */
+  own?: boolean;
+}) {
   const sd = consistency(S.points);
   const h = halves(S.points);
   const delta = trend(S.points);
@@ -25,11 +35,13 @@ export function ReviewScreen({ subject: S }: { subject: ReviewSubject }) {
     <>
       <ScreenHeader
         title="Reviews"
-        meta={`${REVIEW_CONTEXT.cycle} · ${REVIEW_CONTEXT.closes}`}
+        meta={own ? 'Annual appraisal FY 2025–26' : `${REVIEW_CONTEXT.cycle} · ${REVIEW_CONTEXT.closes}`}
         aside={
-          <span className="num" style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
-            {REVIEW_CONTEXT.submitted} of {REVIEW_CONTEXT.total} submitted
-          </span>
+          own ? null : (
+            <span className="num" style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
+              {REVIEW_CONTEXT.submitted} of {REVIEW_CONTEXT.total} submitted
+            </span>
+          )
         }
       />
 
@@ -48,17 +60,19 @@ export function ReviewScreen({ subject: S }: { subject: ReviewSubject }) {
             </div>
             <div style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>{S.identity}</div>
           </div>
-          <div className="row" style={{ gap: 14, flex: 'none' }}>
-            <span className="num" style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
-              {REVIEW_CONTEXT.position}
-            </span>
-            <Link href="/reviews" style={{ fontSize: 13.5, fontWeight: 700 }}>
-              Previous
-            </Link>
-            <Link href="/reviews" style={{ fontSize: 13.5, fontWeight: 700 }}>
-              Next
-            </Link>
-          </div>
+          {own ? null : (
+            <div className="row" style={{ gap: 14, flex: 'none' }}>
+              <span className="num" style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
+                {REVIEW_CONTEXT.position}
+              </span>
+              <Link href="/reviews" style={{ fontSize: 13.5, fontWeight: 700 }}>
+                Previous
+              </Link>
+              <Link href="/reviews" style={{ fontSize: 13.5, fontWeight: 700 }}>
+                Next
+              </Link>
+            </div>
+          )}
         </div>
 
         <Card
@@ -180,7 +194,7 @@ export function ReviewScreen({ subject: S }: { subject: ReviewSubject }) {
             alignItems: 'start',
           }}
         >
-          <RatingCard yearAverage={S.yearAverage} />
+          {own ? <RatingSummary review={review} /> : <RatingCard yearAverage={S.yearAverage} />}
 
           <div className="stack" style={{ gap: 16 }}>
             <Card tone="navy" style={{ padding: '18px 20px 20px' }}>

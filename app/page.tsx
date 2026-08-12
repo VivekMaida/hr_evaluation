@@ -3,6 +3,8 @@ import { auth } from '@/auth';
 import { EmployeeHome } from '@/components/home/EmployeeHome';
 import { HrHome } from '@/components/home/HrHome';
 import { LeadHome } from '@/components/home/LeadHome';
+import { EMPLOYEE_RECORD_VISIBILITY } from '@/lib/constants';
+import { getEmployeeHomeData } from '@/lib/employee-home';
 import { getOrgCompleteness, getPendingExceptions } from '@/lib/org';
 import { getLeadHomeData } from '@/lib/team';
 
@@ -27,8 +29,14 @@ export default async function HomePage() {
       if (!data) forbidden();
       return <LeadHome data={data} />;
     }
-    case 'EMPLOYEE':
-      return <EmployeeHome />;
+    case 'EMPLOYEE': {
+      if (EMPLOYEE_RECORD_VISIBILITY === 'hidden') redirect('/profile');
+      const data = await getEmployeeHomeData(session.user.employeeId, FISCAL_YEAR, {
+        maskOpenCycleData: EMPLOYEE_RECORD_VISIBILITY === 'after-lock',
+      });
+      if (!data) forbidden();
+      return <EmployeeHome data={data} />;
+    }
     default:
       // A role this build doesn't recognize (e.g. a session issued before a
       // role rename, whose value the DB migration hasn't caught up to yet)

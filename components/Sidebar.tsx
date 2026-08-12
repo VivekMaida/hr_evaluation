@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOutAction } from '@/app/login/actions';
-import { FY_LABEL } from '@/lib/constants';
+import { EMPLOYEE_RECORD_VISIBILITY, FY_LABEL } from '@/lib/constants';
 import type { Role } from '@/lib/types';
 import styles from './Sidebar.module.css';
 
@@ -24,7 +24,7 @@ const PRIMARY: NavItem[] = [
   { label: 'Home', href: '/' },
   { label: 'Performance Log', href: '/performance-log', visibleTo: ['MANAGER', 'HR'] },
   { label: 'Scorecard', href: '/scorecard' },
-  { label: 'Reviews', href: '/reviews', visibleTo: ['MANAGER', 'HR'] },
+  { label: 'Reviews', href: '/reviews' },
 ];
 
 const SECONDARY: NavItem[] = [
@@ -36,8 +36,16 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+const SELF_SERVICE_HREFS = ['/scorecard', '/reviews'];
+
 function visibleToUser(item: NavItem, role: Role): boolean {
-  return !item.visibleTo || item.visibleTo.includes(role);
+  if (item.visibleTo && !item.visibleTo.includes(role)) return false;
+  // The self-service surface is hidden end to end for the pilot default —
+  // no point linking to a page that will just redirect back to Profile.
+  if (SELF_SERVICE_HREFS.includes(item.href) && role === 'EMPLOYEE' && EMPLOYEE_RECORD_VISIBILITY === 'hidden') {
+    return false;
+  }
+  return true;
 }
 
 const ROLE_LABEL: Record<Role, string> = {

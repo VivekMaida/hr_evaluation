@@ -196,9 +196,9 @@ export function Scorecard({
                   </span>
                 </div>
                 <div className="spread" style={{ fontSize: 14 }}>
-                  <span>February</span>
+                  <span>{subject.record.openMonthLabel}</span>
                   <Chip tone="cyan" tight>
-                    {subject.record.februaryState}
+                    {subject.record.currentMonthState}
                   </Chip>
                 </div>
                 <div className="spread" style={{ fontSize: 14 }}>
