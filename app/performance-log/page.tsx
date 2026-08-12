@@ -32,32 +32,40 @@ export default async function PerformanceLogPage({
     redirect('/performance-log/no-targets');
   }
 
+  // HR has no direct reports in the leadId sense, so the rail — and the
+  // auto-advance round it drives — is scoped to managers, the same
+  // "signed-in manager's own team" boundary as Home.
+  const team =
+    session.user.role === 'MANAGER'
+      ? await getManagerTeam(session.user.employeeId, FISCAL_YEAR)
+      : [];
+
   // A manager lands on the first person in their team who is not yet
-  // submitted; HR lands on the first open record in the roster.
+  // submitted — reopening the page mid-run resumes where they stopped
+  // rather than dumping them back on person one. Nobody outstanding means
+  // the round is already done. HR lands on the first record in the roster;
+  // there's no "round" for HR to resume.
+  const nextOutstanding = team.find((m) => m.status !== 'submitted');
+  if (session.user.role === 'MANAGER' && !employee && team.length > 0 && !nextOutstanding) {
+    redirect('/performance-log/done');
+  }
+
   const employeeId =
     employee ??
-    (
-      await prisma.employee.findFirst({
-        where:
-          session.user.role === 'MANAGER'
-            ? { leadId: session.user.employeeId }
-            : { leadId: { not: null } },
-        orderBy: { id: 'asc' },
-        select: { id: true },
-      })
-    )?.id ??
+    (session.user.role === 'MANAGER'
+      ? nextOutstanding?.id
+      : (
+          await prisma.employee.findFirst({
+            where: { leadId: { not: null } },
+            orderBy: { id: 'asc' },
+            select: { id: true },
+          })
+        )?.id) ??
     session.user.employeeId;
 
   // ?employee= is a direct URL override — confirm it's actually this actor's
   // to see before rendering anything for it.
   if (!(await canAccessEmployee(session.user, employeeId, false))) forbidden();
-
-  // HR has no direct reports in the leadId sense, so the rail is scoped to
-  // managers — the same "signed-in manager's own team" boundary as Home.
-  const team =
-    session.user.role === 'MANAGER'
-      ? await getManagerTeam(session.user.employeeId, FISCAL_YEAR)
-      : [];
 
   return (
     <>
@@ -76,7 +84,7 @@ export default async function PerformanceLogPage({
       />
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         <TeamRail activeId={employeeId} team={team} />
-        <EntryForm employeeId={employeeId} monthIndex={openCycle.monthIndex} />
+        <EntryForm employeeId={employeeId} monthIndex={openCycle.monthIndex} team={team} />
       </div>
     </>
   );

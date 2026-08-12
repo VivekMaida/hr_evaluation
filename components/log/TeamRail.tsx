@@ -1,7 +1,7 @@
 import Link from 'next/link';
-import { SectionLabel } from '@/components/ui';
+import { Chip, SectionLabel } from '@/components/ui';
 import { bandColour } from '@/lib/score';
-import type { TeamMemberRow } from '@/lib/team';
+import { STATUS_CHIP, type TeamMemberRow } from '@/lib/team';
 import styles from './TeamRail.module.css';
 
 /** The roster beside the entry form. `activeId` is the person being edited. */
@@ -38,16 +38,16 @@ export function TeamRail({ activeId, team }: { activeId: string; team: TeamMembe
               >
                 Editing
               </span>
-            ) : (
-              <span
-                className={styles.score}
-                style={{
-                  color:
-                    member.score === null ? 'var(--grey-line)' : bandColour(member.score),
-                }}
-              >
-                {member.score === null ? '—' : member.score.toFixed(1)}
+            ) : member.status === 'submitted' ? (
+              <span className={styles.score} style={{ color: bandColour(member.score as number) }}>
+                {(member.score as number).toFixed(1)}
               </span>
+            ) : (
+              // "Started but not submitted" is a different state from "not started" —
+              // a manager returning mid-run needs to see where they stopped.
+              <Chip tone={STATUS_CHIP[member.status].tone} tight>
+                {STATUS_CHIP[member.status].label}
+              </Chip>
             )}
           </>
         );

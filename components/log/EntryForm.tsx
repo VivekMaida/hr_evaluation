@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { YearStrip } from '@/components/YearStrip';
 import { Card, SectionLabel } from '@/components/ui';
 import {
@@ -13,6 +14,7 @@ import {
   type EntryRow,
 } from '@/lib/entries';
 import { bandColour, pct } from '@/lib/score';
+import type { TeamMemberRow } from '@/lib/team';
 import type { MonthPoint } from '@/lib/types';
 
 type ApiPayload = {
@@ -39,10 +41,14 @@ function toDraft(rows: EntryRow[]): Record<string, Draft> {
 export function EntryForm({
   employeeId,
   monthIndex,
+  team = [],
 }: {
   employeeId: string;
   monthIndex: number;
+  /** Ordered roster this employee sits in — drives auto-advance and the "N of M" count. */
+  team?: TeamMemberRow[];
 }) {
+  const router = useRouter();
   const [data, setData] = useState<ApiPayload | null>(null);
   const [draft, setDraft] = useState<Record<string, Draft>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -50,10 +56,14 @@ export function EntryForm({
   const [busy, setBusy] = useState<'idle' | 'saving' | 'submitting'>('idle');
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
+  const currentIndex = useMemo(() => team.findIndex((m) => m.id === employeeId), [team, employeeId]);
+
   useEffect(() => {
     let cancelled = false;
     setData(null);
     setLoadError(null);
+    setSaveError(null);
+    setSavedAt(null);
 
     fetch(`/api/entries?employeeId=${encodeURIComponent(employeeId)}&monthIndex=${monthIndex}`)
       .then(async (res) => {
@@ -132,6 +142,13 @@ export function EntryForm({
               ? { ...prev, submission: { state: 'SUBMITTED', weightedScore: body.weightedScore, submittedAt: new Date().toISOString() } }
               : prev,
           );
+          // Auto-advance: after submitting one person, load the next outstanding
+          // person directly rather than returning to the roster. Only a manager
+          // has a team-shaped round to advance through.
+          if (currentIndex !== -1) {
+            const next = team.slice(currentIndex + 1).find((m) => m.status !== 'submitted');
+            router.push(next ? `/performance-log?employee=${next.id}` : '/performance-log/done');
+          }
         }
       } catch (error) {
         setSaveError((error as Error).message);
@@ -139,7 +156,7 @@ export function EntryForm({
         setBusy('idle');
       }
     },
-    [data, employeeId, monthIndex, rows],
+    [data, employeeId, monthIndex, rows, currentIndex, team, router],
   );
 
   const shell = (children: React.ReactNode) => (
@@ -188,6 +205,21 @@ export function EntryForm({
           </div>
         </div>
         <div className="row" style={{ gap: 10, flex: 'none' }}>
+          {currentIndex !== -1 ? (
+            <span
+              className="num"
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: 'var(--navy)',
+                background: 'var(--grey-surface)',
+                borderRadius: 'var(--radius)',
+                padding: '4px 10px',
+              }}
+            >
+              {currentIndex + 1} of {team.length}
+            </span>
+          ) : null}
           <span style={{ fontSize: 13, color: 'var(--grey-body)' }}>
             {savedAt ? `Saved ${savedAt}` : submitted ? 'Submitted' : 'Not saved yet'}
           </span>
