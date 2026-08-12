@@ -26,7 +26,6 @@ const ROUTE_RULES: { path: string; roles: Role[] }[] = [
   { path: '/calibration', roles: ['HR'] },
   { path: '/reports', roles: ['HR'] },
   { path: '/admin', roles: ['HR'] },
-  { path: '/account', roles: ALL },
   { path: '/profile', roles: ALL },
   { path: '/activity', roles: ['HR'] },
 ];

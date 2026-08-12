@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { ScreenHeader } from '@/components/ScreenHeader';
@@ -110,7 +111,15 @@ export default async function AccountsPage() {
                         : '—'}
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                      <ResetForm employeeId={user.employeeId} claimed={claimed} />
+                      <div className="row" style={{ gap: 10, justifyContent: 'flex-end' }}>
+                        <Link
+                          href={`/profile/${user.employeeId}`}
+                          style={{ fontSize: 13.5, fontWeight: 700 }}
+                        >
+                          View profile
+                        </Link>
+                        <ResetForm employeeId={user.employeeId} claimed={claimed} />
+                      </div>
                     </td>
                   </tr>
                 );

@@ -87,7 +87,7 @@ export function Sidebar({ user }: { user: SessionUser }) {
 
       <div className={styles.spacer} />
 
-      <Link href="/account" className={styles.user} style={{ textDecoration: 'none' }}>
+      <Link href="/profile" className={styles.user} style={{ textDecoration: 'none' }}>
         <div className={styles.userName}>{user.name}</div>
         <div className={styles.userRole}>{ROLE_LABEL[user.role]}</div>
       </Link>

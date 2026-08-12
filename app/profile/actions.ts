@@ -20,6 +20,7 @@ const schema = z
     message: 'The two new passwords do not match.',
   });
 
+/** Voluntary self-service change — distinct from the forced first-login flow at /set-password. */
 export async function changePassword(
   _prev: PasswordState,
   formData: FormData,
@@ -41,7 +42,6 @@ export async function changePassword(
   });
   if (!user) return { error: 'Account not found.', ok: false };
 
-  // An account still awaiting first login has no current password to check.
   if (user.passwordHash !== null) {
     const ok = await bcrypt.compare(parsed.data.current, user.passwordHash);
     if (!ok) return { error: 'Current password is not correct.', ok: false };
@@ -69,6 +69,6 @@ export async function changePassword(
     }),
   ]);
 
-  revalidatePath('/account');
+  revalidatePath('/profile');
   return { error: null, ok: true };
 }

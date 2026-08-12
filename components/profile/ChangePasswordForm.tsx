@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { changePassword, type PasswordState } from './actions';
+import { changePassword, type PasswordState } from '@/app/profile/actions';
 
 function SubmitButton() {
   const { pending } = useFormStatus();
