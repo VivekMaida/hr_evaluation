@@ -1,20 +1,22 @@
 import Link from 'next/link';
 import { SectionLabel } from '@/components/ui';
-import { TEAM, TEAM_SUMMARY } from '@/lib/data';
 import { bandColour } from '@/lib/score';
+import type { TeamMemberRow } from '@/lib/team';
 import styles from './TeamRail.module.css';
 
 /** The roster beside the entry form. `activeId` is the person being edited. */
-export function TeamRail({ activeId }: { activeId: string }) {
+export function TeamRail({ activeId, team }: { activeId: string; team: TeamMemberRow[] }) {
+  const logged = team.filter((m) => m.status === 'submitted').length;
+
   return (
     <aside className={styles.rail} aria-label="Team">
       <div className={styles.railHead}>
         <SectionLabel>
-          Team · {TEAM_SUMMARY.logged} of {TEAM_SUMMARY.total} done
+          Team · {logged} of {team.length} done
         </SectionLabel>
       </div>
 
-      {TEAM.map((member) => {
+      {team.map((member) => {
         const active = member.id === activeId;
         const body = (
           <>
@@ -73,9 +75,12 @@ export function TeamRail({ activeId }: { activeId: string }) {
 
       <div className={styles.foot}>
         Tracking in Excel?{' '}
-        <Link href="/performance-log/upload" style={{ fontWeight: 700 }}>
+        <span
+          style={{ fontWeight: 700, color: 'var(--grey-line)' }}
+          title="Spreadsheet upload doesn't parse or commit a real file yet"
+        >
           Upload the sheet
-        </Link>{' '}
+        </span>{' '}
         and skip this form.
       </div>
     </aside>

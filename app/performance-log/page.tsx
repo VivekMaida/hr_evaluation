@@ -6,6 +6,7 @@ import { EntryRouteSwitch } from '@/components/log/EntryRouteSwitch';
 import { TeamRail } from '@/components/log/TeamRail';
 import { canAccessEmployee } from '@/lib/access';
 import { prisma } from '@/lib/db';
+import { getManagerTeam } from '@/lib/team';
 
 export const metadata = { title: 'Performance Log · M3M Perform' };
 export const dynamic = 'force-dynamic';
@@ -51,6 +52,13 @@ export default async function PerformanceLogPage({
   // to see before rendering anything for it.
   if (!(await canAccessEmployee(session.user, employeeId, false))) forbidden();
 
+  // HR has no direct reports in the leadId sense, so the rail is scoped to
+  // managers — the same "signed-in manager's own team" boundary as Home.
+  const team =
+    session.user.role === 'MANAGER'
+      ? await getManagerTeam(session.user.employeeId, FISCAL_YEAR)
+      : [];
+
   return (
     <>
       <ScreenHeader
@@ -67,7 +75,7 @@ export default async function PerformanceLogPage({
         aside={<EntryRouteSwitch />}
       />
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        <TeamRail activeId={employeeId} />
+        <TeamRail activeId={employeeId} team={team} />
         <EntryForm employeeId={employeeId} monthIndex={openCycle.monthIndex} />
       </div>
     </>

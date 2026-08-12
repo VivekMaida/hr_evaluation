@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOutAction } from '@/app/login/actions';
-import { FY_LABEL } from '@/lib/data';
+import { FY_LABEL } from '@/lib/constants';
 import type { Role } from '@/lib/types';
 import styles from './Sidebar.module.css';
 
@@ -28,7 +28,6 @@ const PRIMARY: NavItem[] = [
 ];
 
 const SECONDARY: NavItem[] = [
-  { label: 'Reports', href: '/reports', visibleTo: ['HR'] },
   { label: 'Admin', href: '/admin', visibleTo: ['HR'] },
 ];
 

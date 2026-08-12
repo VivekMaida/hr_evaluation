@@ -1,4 +1,4 @@
-import { FY_LABEL } from './data';
+import { FY_LABEL } from './constants';
 import { prisma } from './db';
 import {
   getEmployeeCycleScores,

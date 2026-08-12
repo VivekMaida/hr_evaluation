@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { YearStrip } from '@/components/YearStrip';
 import { Card, SectionLabel } from '@/components/ui';
-import { buildYear, memberById } from '@/lib/data';
 import {
   NOTE_BAND,
   achievementOf,
@@ -14,6 +13,7 @@ import {
   type EntryRow,
 } from '@/lib/entries';
 import { bandColour, pct } from '@/lib/score';
+import type { MonthPoint } from '@/lib/types';
 
 type ApiPayload = {
   employee: { id: string; name: string; title: string };
@@ -22,6 +22,7 @@ type ApiPayload = {
   weightedScore: number | null;
   submission: { state: string; weightedScore: number | null; submittedAt: string | null } | null;
   editable: boolean;
+  points: MonthPoint[];
 };
 
 type Draft = { actual: string; contextNote: string };
@@ -174,7 +175,6 @@ export function EntryForm({
 
   const submitted = data.submission?.state === 'SUBMITTED';
   const editable = data.editable;
-  const member = memberById(employeeId);
 
   return shell(
     <>
@@ -380,12 +380,12 @@ export function EntryForm({
               <SectionLabel tone="navy">12-month record</SectionLabel>
               <YearStrip
                 size="medium"
-                points={buildYear(member?.closed ?? [])}
+                points={data.points}
                 label={`${data.employee.name}, twelve months`}
               />
               <div style={{ fontSize: 12.5, color: 'var(--grey-body)', lineHeight: 1.45 }}>
-                Historical months from the seeded record. Live once earlier cycles are
-                logged through the app.
+                This employee's real submitted months. The open month updates as it's
+                logged.
               </div>
             </div>
           </Card>
@@ -403,12 +403,13 @@ export function EntryForm({
               <SectionLabel>Entry routes</SectionLabel>
               <div style={{ fontSize: 13.5, lineHeight: 1.55 }}>
                 You are on <strong style={{ color: 'var(--navy)' }}>form entry</strong>.
-                Teams that already track in Excel can upload the monthly sheet instead —
-                same KRAs, same validation, same context-note rule.
               </div>
-              <Link href="/performance-log/upload" style={{ fontSize: 13.5, fontWeight: 700 }}>
+              <span
+                style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--grey-line)' }}
+                title="Spreadsheet upload doesn't parse or commit a real file yet"
+              >
                 Switch to spreadsheet upload
-              </Link>
+              </span>
             </div>
           </Card>
         </div>

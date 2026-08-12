@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 /**
- * Entry route is a segmented control at the top of Performance Log, so the
- * spreadsheet path drops in without restructuring the screen.
+ * Entry route is a segmented control at the top of Performance Log. Upload
+ * isn't linked here — it parses no file, so nothing would actually commit.
  */
 export function EntryRouteSwitch() {
   const pathname = usePathname();
@@ -21,14 +21,14 @@ export function EntryRouteSwitch() {
       >
         Form entry
       </Link>
-      <Link
-        href="/performance-log/upload"
+      <span
         className="segmented__option"
         aria-pressed={onUpload}
-        style={{ textDecoration: 'none' }}
+        style={{ color: 'var(--grey-line)', cursor: 'not-allowed' }}
+        title="Spreadsheet upload doesn't parse or commit a real file yet"
       >
         Spreadsheet upload
-      </Link>
+      </span>
     </div>
   );
 }

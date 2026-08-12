@@ -4,6 +4,7 @@ import { auth } from '@/auth';
 import { canAccessEmployee } from '@/lib/access';
 import { prisma } from '@/lib/db';
 import { blockers, buildRows, weightedScoreOf } from '@/lib/entries';
+import { getEmployeeCycleScores, pointsFromCycleScores } from '@/lib/employee-year';
 
 export const runtime = 'nodejs';
 // Always hit the database; a cached month is a wrong month.
@@ -70,12 +71,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const [entries, submission] = await Promise.all([
+  const [entries, submission, cycleScores] = await Promise.all([
     prisma.monthlyEntry.findMany({ where: { employeeId, cycleId: cycle.id } }),
     prisma.submission.findFirst({
       where: { employeeId, cycleId: cycle.id, state: { in: ['DRAFT', 'SUBMITTED'] } },
       orderBy: { updatedAt: 'desc' },
     }),
+    getEmployeeCycleScores(employeeId, FISCAL_YEAR),
   ]);
 
   const rows = buildRows(kpis, entries);
@@ -95,6 +97,8 @@ export async function GET(request: Request) {
         }
       : null,
     editable: cycle.state === 'OPEN',
+    /** This employee's real twelve-month record, Apr → Mar, for the side panel. */
+    points: pointsFromCycleScores(cycleScores),
   });
 }
 

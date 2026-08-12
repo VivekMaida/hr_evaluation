@@ -73,15 +73,27 @@ Prisma's CLI reads `.env`, not `.env.local`, so every `db:*` script goes through
 | `npm run db:seed` | Idempotent — departments, employees, users, 12 cycles, KPI set |
 | `npm run db:studio` | Browse the data |
 
-**Accounts.** The seed creates users with **no password**. Each person sets their
-own on first sign-in: type the password you want and the account is yours.
-Nobody self-registers — an email with no seeded account cannot get in.
+**Accounts.** The seed gives every pilot user the same default password
+(`m3m@12345`, in `lib/pilot-auth.ts`) and sets `mustSetPassword: true`.
+Middleware redirects anyone with that flag to `/set-password` before they can
+reach any other route — there is no way to use the app while still on the
+default. Nobody self-registers — an email with no seeded account cannot get in.
 
-The trade-off: whoever signs in first claims an account. Acceptable for a closed
-pilot on an invite-only list; not acceptable for general rollout. Replace with
-SSO before widening beyond the pilot.
+HR can reset an account from `/admin/accounts`. A reset puts the password back
+to the shared default and sets `mustSetPassword` again, so the person goes
+through `/set-password` a second time; every reset is logged against the HR
+person's name.
 
-Passwords are bcrypt-hashed at 12 rounds and never stored in plain text.
+The trade-off: one password is shared across all nine pilot accounts, handed
+out in person. Acceptable for a closed pilot with in-person credential
+handoff; not acceptable for general rollout — v1 needs per-user temporary
+passwords generated at account creation (see the note in `lib/pilot-auth.ts`).
+
+Passwords are bcrypt-hashed at 12 rounds and never stored in plain text. Role
+and `mustSetPassword` are re-read from the database on every Node-side session
+refresh (not just trusted from the sign-in-time JWT), so an HR-side role
+change or reset takes effect on the person's next page load rather than
+requiring them to sign out and back in.
 
 ### Loading the real KPI master
 
@@ -102,24 +114,76 @@ is ephemeral and resets on every deployment.
 
 | Route | Design | Notes |
 | --- | --- | --- |
-| `/` | Screen 01 / 05 | Home. Lead or HR, switched from the sidebar. |
-| `/performance-log` | Screen 02 | Monthly entry. Live achievement, weighted score, context-note gate. |
-| `/performance-log/upload` | Screen 07 | Spreadsheet route — download, check, confirm. |
-| `/performance-log/no-targets` | Screen 08a | KRA set not yet published. |
-| `/performance-log/locked` | Screen 08b | A closed month, read-only. |
-| `/performance-log/upload/failed` | Screen 08c | Every row rejected. |
-| `/scorecard` · `/scorecard/[id]` | Screen 03 | Full year. `/scorecard/EMP-12207` is the thin-coverage variant. |
-| `/reviews` | Screen 04 | Annual rating. Pick a band two or more from the record to see the justification state. |
-| `/reports` | Screen 06 | Consistency analysis and rating spread by lead. |
-| `/my-team`, `/calibration`, `/admin`, `/activity` | — | In the IA, not drawn in round 1. |
+| `/login`, `/set-password` | — | Sign-in; forced first-login / post-reset password change. |
+| `/` | Screen 01 / 05 | Home. Content branches on role — HR, Manager, or Employee (stub). |
+| `/performance-log` | Screen 02 | Monthly entry. Live achievement, weighted score, context-note gate. Manager and HR only. |
+| `/performance-log/upload` | Screen 07 | Spreadsheet route — download, check, confirm. Hidden from nav; see below. |
+| `/performance-log/no-targets` | Screen 08a | Real: reached when no `Cycle` is `OPEN` for the fiscal year. |
+| `/performance-log/locked` | Screen 08b | A closed month, read-only. Orphaned; see below. |
+| `/performance-log/upload/failed` | Screen 08c | Every row rejected. Orphaned; see below. |
+| `/scorecard` · `/scorecard/[id]` | Screen 03 | Full year, DB-backed. No id resolves to your own; record-level access via `canAccessEmployee()`. |
+| `/reviews` · `/reviews/[id]` | Screen 04 | Annual rating, DB-backed. Same access rule as Scorecard. |
+| `/reports` | Screen 06 | Consistency analysis and rating spread by lead. Fixture-backed, hidden from nav. |
+| `/account` | — | Change your own password. |
+| `/admin` | — | Half built: links to `/admin/accounts` (real); publishing KPIs and cycles is not. |
+| `/admin/accounts` | — | HR-only. Reset a password, see who's still on the default. |
+| `/my-team`, `/calibration`, `/activity` | — | Role-gated placeholders — in the IA, nothing drawn behind them. |
 
-**Only `/performance-log` reads and writes the database.** Home, Scorecard,
-Reviews and Reports still render the fixtures in `lib/*-data.ts`. They are
-design-accurate but not yet live — porting them is the next piece of work.
+**`/performance-log/no-targets` is real, not a placeholder.** `/performance-log`
+redirects there automatically whenever no cycle is marked `OPEN` for the fiscal
+year — a genuine gap that opens up at cycle rollover, between the previous
+cycle locking and HR opening the next one. It reads the real `Cycle` rows.
 
-The role switch at the foot of the sidebar is left over from the prototype and
-now disagrees with the signed-in user. Remove it once the remaining screens read
-from the session.
+**`/performance-log/locked` and `/performance-log/upload/failed` are orphaned.**
+Nothing in the app links or redirects to either — they're reachable only by
+typing the URL. Locked-month correction ("Request a correction" on the locked
+screen) has no route behind it yet either: `CorrectionRequest` exists in the
+schema, but no page or action creates one — the button is decorative.
+
+See "What's wired to the database" below for which screens are live and which
+still render fixtures.
+
+## What's wired to the database
+
+**Live** — reads and writes through Prisma, no fixtures:
+
+- `/` — HR sees real org completeness and pending exceptions (`lib/org.ts`); a
+  Manager sees their real direct reports (`lib/team.ts`); Employee is a stub
+  (see Unbuilt, below).
+- `/performance-log` — the entry form (`/api/entries`), the team rail, and the
+  12-month record card all read real `Kpi` / `MonthlyEntry` / `Submission` rows.
+- `/performance-log/no-targets` — reads real `Cycle` rows (see above).
+- `/scorecard`, `/scorecard/[id]`, `/reviews`, `/reviews/[id]` —
+  `lib/scorecard.ts` / `lib/reviews.ts`, sharing `lib/employee-year.ts` for the
+  twelve-month history.
+- `/account`, `/admin/accounts`, `/set-password` — real `User` / `Employee` rows.
+- Auth throughout — role and `mustSetPassword` are re-read from the database on
+  the Node side, not just trusted from the sign-in-time JWT.
+- Record-level access — `canAccessEmployee()` in `lib/access.ts` gates every
+  read above: HR sees anyone, a Manager sees their own reports, everyone sees
+  themselves.
+
+**Still reads fixtures:**
+
+- `/reports` — `lib/reports-data.ts`. Hidden from nav: it needs variance across
+  several closed months to say anything, which this pilot doesn't have yet.
+- `/performance-log/upload` and its steps — `lib/upload-data.ts`. Hidden from
+  nav and its in-page links disabled: the flow parses no file and commits
+  nothing real.
+- `lib/data.ts` — down to two consumers: `prisma/seed.ts` (its actual job) and
+  `/performance-log/upload`'s date labels.
+
+**Unbuilt:**
+
+- `/my-team`, `/calibration`, `/activity` — role-gated placeholders
+  (`NotDrawnYet`), in the IA, nothing behind them.
+- The Employee Home (`components/home/EmployeeHome.tsx`) — a stub; its content
+  hasn't been specified yet.
+- `/admin` beyond Accounts — publishing a KPI/KRA set, opening and locking
+  cycles, and deciding exception requests all have database models (`Kpi`,
+  `Cycle`, `ExceptionRequest`) but no screen.
+- `/performance-log/locked` and `/performance-log/upload/failed` — orphaned;
+  see above.
 
 ## Superseded: GitHub Pages
 
@@ -127,33 +191,40 @@ The app was briefly a static export deployed to GitHub Pages. That is gone: an
 app that saves data needs a server, so `output: 'export'` and the Pages workflow
 were both removed in favour of Vercel.
 
-Two leftovers still in the tree, harmless and useful if the app is ever hosted
-under a subpath again:
+`lib/scorecard-data.ts` and its `LINKED_EMPLOYEE_IDS` are gone — `/scorecard/[id]`
+and `/reviews/[id]` read the database now and no longer use
+`generateStaticParams` at all, so there is nothing left to prerender.
 
-- `LINKED_EMPLOYEE_IDS` in `lib/scorecard-data.ts` still drives
-  `generateStaticParams` for `/scorecard/[employeeId]` and
-  `/reviews/[employeeId]`, so those pages prerender.
-- `asset()` in `lib/base-path.ts` prefixes `public/` assets with
-  `NEXT_PUBLIC_BASE_PATH`. Unset, it is a no-op.
+One leftover still in the tree, harmless and useful if the app is ever hosted
+under a subpath again: `asset()` in `lib/base-path.ts` prefixes `public/`
+assets with `NEXT_PUBLIC_BASE_PATH`. Unset, it is a no-op.
 
 ## Layout
 
 ```
 app/                 routes, one folder per screen
+  api/entries/       the one API route — reads and writes MonthlyEntry/Submission
 components/          shared UI; ui.tsx holds the brand-kit furniture
   YearStrip.tsx      the twelve-month component, all three sizes
   home/ log/ reviews/ scorecard/ reports/
 lib/
   types.ts           domain types
   score.ts           the scoring rules — bands, achievement, coverage, trend
-  data.ts            Sales team fixtures and the open cycle
-  hr-data.ts         organisation-wide fixtures
-  scorecard-data.ts  reviews-data.ts  reports-data.ts  upload-data.ts
+  constants.ts       TODAY_LABEL / FY_LABEL — the pilot's fixed "today", not employee data
+  access.ts          canAccessEmployee() — the one record-level access check
+  employee-year.ts   one employee's twelve Cycle/Submission rows, shared by several screens
+  entries.ts         achievement/weighted-score maths shared by the entry form and API route
+  team.ts            a Manager's real direct reports — Home's "My Team" and the entry rail
+  org.ts             org-wide completeness and pending exceptions — HR's Home
+  scorecard.ts       reviews.ts     DB-backed queries for those two screens
+  data.ts            down to seed.ts and the upload page's date labels — see below
+  reports-data.ts    upload-data.ts    the two fixture modules still in real use
 public/m3m-logo.png  the mark, from the design project's uploads/
 ```
 
-`lib/*-data.ts` is the only place fixtures live. Swap those modules for real
-data access; nothing above them reaches into the shapes directly.
+`lib/reports-data.ts` and `lib/upload-data.ts` are the only fixture modules a
+screen still renders from directly; `lib/data.ts` is nearly retired. See
+"What's wired to the database" above for the full breakdown.
 
 ## Rules worth not breaking
 
