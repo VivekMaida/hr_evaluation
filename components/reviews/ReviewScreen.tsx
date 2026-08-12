@@ -3,24 +3,23 @@ import { CoverageBar } from '@/components/CoverageBar';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { YearStrip } from '@/components/YearStrip';
 import { Card, Chip, SectionLabel } from '@/components/ui';
-import {
-  BANDS,
-  REVIEW_CONTEXT,
-  REVIEW_SUBJECT as S,
-  impliedBand,
-} from '@/lib/reviews-data';
+import { BANDS, REVIEW_CONTEXT, impliedBand, type ReviewSubject } from '@/lib/reviews';
+import { coverageBand, consistencyLabel, trendLabel } from '@/lib/scorecard';
 import { consistency, halves, signed, trend } from '@/lib/score';
 import { RatingCard } from './RatingCard';
 
-export function ReviewScreen() {
+export function ReviewScreen({ subject: S }: { subject: ReviewSubject }) {
   const sd = consistency(S.points);
   const h = halves(S.points);
   const delta = trend(S.points);
   const implied = impliedBand(S.yearAverage);
+  const band = coverageBand(S.monthsLogged);
 
-  const scores = S.points.map((p) => p.score as number);
-  const lo = Math.min(...scores);
-  const hi = Math.max(...scores);
+  const scores = S.points
+    .filter((p) => p.status === 'scored' && typeof p.score === 'number')
+    .map((p) => p.score as number);
+  const lo = scores.length > 0 ? Math.min(...scores) : null;
+  const hi = scores.length > 0 ? Math.max(...scores) : null;
 
   return (
     <>
@@ -123,10 +122,12 @@ export function ReviewScreen() {
             <div className="stack" style={{ gap: 5 }}>
               <SectionLabel tone="navy">Consistency</SectionLabel>
               <div style={{ fontSize: 36, fontWeight: 600, color: 'var(--navy)', lineHeight: 1.05 }}>
-                Steady
+                {consistencyLabel(sd, S.monthsLogged)}
               </div>
               <div className="num" style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
-                SD {sd?.toFixed(1) ?? '—'} · no month outside {lo.toFixed(0)}–{hi.toFixed(0)}
+                {lo === null || hi === null
+                  ? 'Suppressed — needs 2 or more logged months'
+                  : `SD ${sd?.toFixed(1) ?? '—'} · no month outside ${lo.toFixed(0)}–${hi.toFixed(0)}`}
               </div>
             </div>
           </Card>
@@ -135,10 +136,12 @@ export function ReviewScreen() {
             <div className="stack" style={{ gap: 5 }}>
               <SectionLabel tone="navy">Trend</SectionLabel>
               <div style={{ fontSize: 36, fontWeight: 600, color: 'var(--navy)', lineHeight: 1.05 }}>
-                Holding
+                {trendLabel(delta)}
               </div>
               <div className="num" style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
-                H1 {h?.first.toFixed(1)} → H2 {h?.second.toFixed(1)} · {signed(delta)}
+                {h === null
+                  ? 'Suppressed — no comparable halves'
+                  : `H1 ${h.first.toFixed(1)} → H2 ${h.second.toFixed(1)} · ${signed(delta)}`}
               </div>
             </div>
           </Card>
@@ -147,8 +150,8 @@ export function ReviewScreen() {
             <div className="stack" style={{ gap: 10 }}>
               <div className="spread" style={{ alignItems: 'baseline' }}>
                 <SectionLabel>Coverage</SectionLabel>
-                <Chip tone="green" tight>
-                  Complete
+                <Chip tone={band === 'insufficient' ? 'red' : 'green'} tight>
+                  {band === 'complete' ? 'Complete' : band === 'partial' ? 'Partial' : 'Insufficient'}
                 </Chip>
               </div>
               <div className="num" style={{ fontSize: 36, fontWeight: 600, color: 'var(--navy)', lineHeight: 1.05 }}>
@@ -159,7 +162,11 @@ export function ReviewScreen() {
               </div>
               <CoverageBar points={S.points} />
               <div style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
-                Full year on record. This rating is rateable without an exception.
+                {band === 'complete'
+                  ? 'Full year on record. This rating is rateable without an exception.'
+                  : band === 'partial'
+                    ? 'Rateable, but flagged for HR in Calibration.'
+                    : 'Coverage is too thin to rate without an HR exception.'}
               </div>
             </div>
           </Card>
@@ -179,6 +186,11 @@ export function ReviewScreen() {
             <Card tone="navy" style={{ padding: '18px 20px 20px' }}>
               <div className="stack" style={{ gap: 14 }}>
                 <SectionLabel tone="navy">Context notes from the year</SectionLabel>
+                {S.contextNotes.length === 0 ? (
+                  <div style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
+                    No context notes on this record.
+                  </div>
+                ) : null}
                 {S.contextNotes.map((note, i) => (
                   <div key={note.when} className="stack" style={{ gap: 14 }}>
                     {i > 0 ? (

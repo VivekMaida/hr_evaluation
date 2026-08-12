@@ -1,8 +1,16 @@
+import { forbidden, redirect } from 'next/navigation';
+import { auth } from '@/auth';
 import { NotDrawnYet } from '@/components/NotDrawnYet';
 
 export const metadata = { title: 'My Team · M3M Perform' };
+export const dynamic = 'force-dynamic';
 
-export default function MyTeamPage() {
+/** Only a manager has a team to see — HR and individual employees have none. */
+export default async function MyTeamPage() {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (session.user.role !== 'MANAGER') forbidden();
+
   return (
     <NotDrawnYet
       title="My Team"

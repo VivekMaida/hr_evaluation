@@ -1,9 +1,10 @@
-import { redirect } from 'next/navigation';
+import { forbidden, redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { EntryForm } from '@/components/log/EntryForm';
 import { EntryRouteSwitch } from '@/components/log/EntryRouteSwitch';
 import { TeamRail } from '@/components/log/TeamRail';
+import { canAccessEmployee } from '@/lib/access';
 import { prisma } from '@/lib/db';
 
 export const metadata = { title: 'Performance Log · M3M Perform' };
@@ -18,6 +19,8 @@ export default async function PerformanceLogPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect('/login');
+  // An employee's month is logged by their manager, not by themselves here.
+  if (session.user.role === 'EMPLOYEE') forbidden();
 
   const { employee } = await searchParams;
 
@@ -28,22 +31,25 @@ export default async function PerformanceLogPage({
     redirect('/performance-log/no-targets');
   }
 
-  // A lead lands on the first person in their team who is not yet submitted;
-  // anyone else lands on themselves.
+  // A manager lands on the first person in their team who is not yet
+  // submitted; HR lands on the first open record in the roster.
   const employeeId =
     employee ??
-    (session.user.role === 'EMPLOYEE'
-      ? session.user.employeeId
-      : ((
-          await prisma.employee.findFirst({
-            where:
-              session.user.role === 'LEAD'
-                ? { leadId: session.user.employeeId }
-                : { leadId: { not: null } },
-            orderBy: { id: 'asc' },
-            select: { id: true },
-          })
-        )?.id ?? session.user.employeeId));
+    (
+      await prisma.employee.findFirst({
+        where:
+          session.user.role === 'MANAGER'
+            ? { leadId: session.user.employeeId }
+            : { leadId: { not: null } },
+        orderBy: { id: 'asc' },
+        select: { id: true },
+      })
+    )?.id ??
+    session.user.employeeId;
+
+  // ?employee= is a direct URL override — confirm it's actually this actor's
+  // to see before rendering anything for it.
+  if (!(await canAccessEmployee(session.user, employeeId, false))) forbidden();
 
   return (
     <>

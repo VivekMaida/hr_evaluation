@@ -11,14 +11,14 @@ declare module 'next-auth' {
     user: {
       role: Role;
       employeeId: string;
-      /** True on the request where the account was just claimed. */
-      justClaimed?: boolean;
+      /** True until the person replaces the pilot default (or a reset) password. */
+      mustSetPassword: boolean;
     } & DefaultSession['user'];
   }
   interface User {
     role: Role;
     employeeId: string;
-    justClaimed?: boolean;
+    mustSetPassword: boolean;
   }
 }
 
@@ -27,9 +27,7 @@ const credentialsSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
-const BCRYPT_ROUNDS = 12;
-
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   ...authConfig,
 
   providers: [
@@ -50,28 +48,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
 
         // No such account. HR pre-creates the pilot users; nobody self-registers.
-        if (!user) return null;
+        if (!user || !user.passwordHash) return null;
 
-        let justClaimed = false;
+        const ok = await bcrypt.compare(password, user.passwordHash);
+        if (!ok) return null;
 
-        if (user.passwordHash === null) {
-          // First login: the person chooses their own password and the account
-          // is theirs from here. Whoever signs in first claims it — acceptable
-          // for a closed pilot on an invite-only list, not for general rollout.
-          const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { passwordHash, mustSetPassword: false, lastLoginAt: new Date() },
-          });
-          justClaimed = true;
-        } else {
-          const ok = await bcrypt.compare(password, user.passwordHash);
-          if (!ok) return null;
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { lastLoginAt: new Date() },
-          });
-        }
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { lastLoginAt: new Date() },
+        });
 
         return {
           id: user.id,
@@ -79,29 +64,50 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: user.employee.name,
           role: user.role,
           employeeId: user.employeeId,
-          justClaimed,
+          mustSetPassword: user.mustSetPassword,
         };
       },
     }),
   ],
 
   callbacks: {
-    // Spreading authConfig replaces its callbacks wholesale, so carry the
-    // edge-side `authorized` check through explicitly.
+    // Brings in authConfig's `authorized` and its edge-safe `session`. The
+    // fuller `session` / `jwt` below are declared after the spread, so they
+    // win here — this Node instance refreshes role and mustSetPassword from DB.
     ...authConfig.callbacks,
 
-    jwt({ token, user }) {
+    async jwt({ token, user }) {
       if (user) {
         token.role = user.role;
         token.employeeId = user.employeeId;
-        token.justClaimed = user.justClaimed;
+        token.mustSetPassword = user.mustSetPassword;
+        return token;
       }
+
+      // Re-read on each Node JWT refresh so HR role changes and password-reset
+      // flags apply without a second sign-in. Middleware still sees the cookie
+      // until this runs once and the Set-Cookie lands (one-request lag).
+      if (token.employeeId) {
+        const dbUser = await prisma.user.findUnique({
+          where: { employeeId: token.employeeId as string },
+          select: { role: true, mustSetPassword: true },
+        });
+        if (!dbUser) {
+          // Account gone — strip claims so the next authorized check fails closed.
+          delete token.role;
+          delete token.mustSetPassword;
+          return token;
+        }
+        token.role = dbUser.role;
+        token.mustSetPassword = dbUser.mustSetPassword;
+      }
+
       return token;
     },
     session({ session, token }) {
       session.user.role = token.role as Role;
       session.user.employeeId = token.employeeId as string;
-      session.user.justClaimed = token.justClaimed as boolean | undefined;
+      session.user.mustSetPassword = Boolean(token.mustSetPassword);
       return session;
     },
   },

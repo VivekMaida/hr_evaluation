@@ -102,4 +102,4 @@ export type AnnualReview = {
 };
 
 /** Mirrors the Prisma `Role` enum. */
-export type Role = 'EMPLOYEE' | 'LEAD' | 'HR';
+export type Role = 'EMPLOYEE' | 'MANAGER' | 'HR';

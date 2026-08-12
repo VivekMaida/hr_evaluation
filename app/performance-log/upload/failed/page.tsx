@@ -1,8 +1,11 @@
 import Link from 'next/link';
+import { forbidden, redirect } from 'next/navigation';
+import { auth } from '@/auth';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Card, Chip, SectionLabel } from '@/components/ui';
 
 export const metadata = { title: 'Import failed · M3M Perform' };
+export const dynamic = 'force-dynamic';
 
 /**
  * 08c — every row rejected. Distinct from the partial-commit report in Screen
@@ -44,7 +47,11 @@ const AS_READ = [
   },
 ];
 
-export default function ImportFailedPage() {
+export default async function ImportFailedPage() {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (session.user.role === 'EMPLOYEE') forbidden();
+
   return (
     <>
       <ScreenHeader

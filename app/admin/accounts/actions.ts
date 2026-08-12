@@ -1,20 +1,23 @@
 'use server';
 
+import bcrypt from 'bcryptjs';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
+import { BCRYPT_ROUNDS, PILOT_DEFAULT_PASSWORD } from '@/lib/pilot-auth';
 
 export type ResetState = { error: string | null; message: string | null };
 
 const schema = z.object({ employeeId: z.string().min(1) });
 
 /**
- * Puts an account back into first-login state: the password is cleared and the
- * next person to sign in as that email sets a new one.
+ * Puts an account back on the shared pilot default password and forces
+ * /set-password on their next sign-in.
  *
  * There is no email infrastructure in the pilot, so reset is HR-initiated by
- * design — HR clears it, tells the person, the person picks a new password.
+ * design — HR resets it, tells the person the default password in person, the
+ * person signs in and immediately picks their own.
  */
 export async function resetPassword(
   _prev: ResetState,
@@ -35,10 +38,12 @@ export async function resetPassword(
   });
   if (!user) return { error: 'No such account.', message: null };
 
+  const passwordHash = await bcrypt.hash(PILOT_DEFAULT_PASSWORD, BCRYPT_ROUNDS);
+
   await prisma.$transaction([
     prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash: null, mustSetPassword: true },
+      data: { passwordHash, mustSetPassword: true },
     }),
     prisma.activityLog.create({
       data: {
@@ -54,6 +59,6 @@ export async function resetPassword(
   revalidatePath('/admin/accounts');
   return {
     error: null,
-    message: `${user.employee.name} can now set a new password by signing in.`,
+    message: `${user.employee.name}'s password is back to the default (${PILOT_DEFAULT_PASSWORD}). Tell them directly — they'll be asked to choose their own the moment they sign in.`,
   };
 }

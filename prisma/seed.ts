@@ -1,15 +1,21 @@
 /**
  * Seeds the pilot. Idempotent — safe to re-run.
  *
- * Users are created WITHOUT a password. Each person sets their own on first
- * login; nobody self-registers.
+ * Users get the shared pilot default password and mustSetPassword = true.
+ * Re-running seed resets those fields so the handoff credentials stay known.
+ * Nobody self-registers.
+ *
+ * The shared default is pilot-only (in-person handoff). v1 must use per-user
+ * temporary passwords at account creation — see lib/pilot-auth.ts.
  *
  * The KPI set below is still the prototype's Sales fixture. Replace
  * `KPI_TEMPLATE` (and the roster, if it differs) with the real sheet from HR
  * before the pilot starts — see README, "Loading the real KPI master".
  */
+import bcrypt from 'bcryptjs';
 import { PrismaClient, type CycleState, type Role } from '@prisma/client';
 import { TEAM, CURRENT_USER, ENTRY_KRAS } from '../lib/data';
+import { BCRYPT_ROUNDS, PILOT_DEFAULT_PASSWORD } from '../lib/pilot-auth';
 
 const prisma = new PrismaClient();
 
@@ -110,9 +116,11 @@ async function main() {
     });
   }
 
-  // Accounts: HR pre-creates, the person chooses the password on first login.
+  // Accounts: HR pre-creates with the shared pilot default; first sign-in
+  // forces a personal password via /set-password.
+  const passwordHash = await bcrypt.hash(PILOT_DEFAULT_PASSWORD, BCRYPT_ROUNDS);
   const accounts: { employeeId: string; name: string; role: Role }[] = [
-    { employeeId: lead.id, name: lead.name, role: 'LEAD' },
+    { employeeId: lead.id, name: lead.name, role: 'MANAGER' },
     { employeeId: hr.id, name: hr.name, role: 'HR' },
     ...TEAM.map((m) => ({ employeeId: m.id, name: m.name, role: 'EMPLOYEE' as Role })),
   ];
@@ -121,12 +129,17 @@ async function main() {
     const email = emailFor(account.name);
     await prisma.user.upsert({
       where: { employeeId: account.employeeId },
-      update: { email, role: account.role },
+      update: {
+        email,
+        role: account.role,
+        passwordHash,
+        mustSetPassword: true,
+      },
       create: {
         email,
         role: account.role,
         employeeId: account.employeeId,
-        passwordHash: null,
+        passwordHash,
         mustSetPassword: true,
       },
     });
@@ -218,7 +231,7 @@ async function main() {
     submissions: await prisma.submission.count(),
   };
   console.log('Seed complete:', counts);
-  console.log('\nAccounts (no password until first login):');
+  console.log('\nAccounts (default password; must change on first sign-in):');
   for (const account of accounts) console.log(`  ${emailFor(account.name)}  ${account.role}`);
 }
 

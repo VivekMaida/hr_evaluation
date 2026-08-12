@@ -16,22 +16,20 @@ export type SessionUser = {
 type NavItem = {
   label: string;
   href: string;
-  /** Restricted to HR. Shown to a lead, dimmed, with an HR tag. */
-  hrOnly?: boolean;
+  /** Roles that can see this item. Omit to show it to everyone. */
+  visibleTo?: Role[];
 };
 
 const PRIMARY: NavItem[] = [
   { label: 'Home', href: '/' },
-  { label: 'My Team', href: '/my-team' },
-  { label: 'Performance Log', href: '/performance-log' },
+  { label: 'Performance Log', href: '/performance-log', visibleTo: ['MANAGER', 'HR'] },
   { label: 'Scorecard', href: '/scorecard' },
   { label: 'Reviews', href: '/reviews' },
 ];
 
 const SECONDARY: NavItem[] = [
-  { label: 'Calibration', href: '/calibration', hrOnly: true },
-  { label: 'Reports', href: '/reports', hrOnly: true },
-  { label: 'Admin', href: '/admin', hrOnly: true },
+  { label: 'Reports', href: '/reports', visibleTo: ['HR'] },
+  { label: 'Admin', href: '/admin', visibleTo: ['HR'] },
 ];
 
 function isActive(pathname: string, href: string): boolean {
@@ -39,15 +37,31 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function visibleToUser(item: NavItem, role: Role): boolean {
+  return !item.visibleTo || item.visibleTo.includes(role);
+}
+
 const ROLE_LABEL: Record<Role, string> = {
   HR: 'HR · Performance',
-  LEAD: 'Team Lead',
+  MANAGER: 'Manager',
   EMPLOYEE: 'Employee',
 };
 
+function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+  return (
+    <Link
+      key={item.href}
+      href={item.href}
+      className={`${styles.link} ${isActive(pathname, item.href) ? styles.linkActive : ''}`}
+      aria-current={isActive(pathname, item.href) ? 'page' : undefined}
+    >
+      {item.label}
+    </Link>
+  );
+}
+
 export function Sidebar({ user }: { user: SessionUser }) {
   const pathname = usePathname();
-  const hr = user.role === 'HR';
 
   return (
     <nav className={styles.nav} aria-label="Primary">
@@ -59,47 +73,17 @@ export function Sidebar({ user }: { user: SessionUser }) {
       <div className={styles.fy}>{FY_LABEL}</div>
 
       <div className={styles.group}>
-        {PRIMARY.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`${styles.link} ${
-              isActive(pathname, item.href) ? styles.linkActive : ''
-            }`}
-            aria-current={isActive(pathname, item.href) ? 'page' : undefined}
-          >
-            {item.label}
-          </Link>
+        {PRIMARY.filter((item) => visibleToUser(item, user.role)).map((item) => (
+          <NavLink key={item.href} item={item} pathname={pathname} />
         ))}
       </div>
 
       <div className={styles.divider} />
 
       <div className={styles.groupSecondary}>
-        {SECONDARY.map((item) =>
-          hr ? (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`${styles.link} ${
-                isActive(pathname, item.href) ? styles.linkActive : ''
-              }`}
-              aria-current={isActive(pathname, item.href) ? 'page' : undefined}
-            >
-              {item.label}
-            </Link>
-          ) : (
-            <span
-              key={item.href}
-              className={styles.linkLocked}
-              title="HR only"
-              aria-disabled="true"
-            >
-              {item.label}
-              <span className={styles.tag}>HR</span>
-            </span>
-          ),
-        )}
+        {SECONDARY.filter((item) => visibleToUser(item, user.role)).map((item) => (
+          <NavLink key={item.href} item={item} pathname={pathname} />
+        ))}
       </div>
 
       <div className={styles.spacer} />

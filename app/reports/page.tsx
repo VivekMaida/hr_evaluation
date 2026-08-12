@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { forbidden, redirect } from 'next/navigation';
+import { auth } from '@/auth';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { ConsistencyScatter } from '@/components/reports/ConsistencyScatter';
 import { RatingSpreadBar } from '@/components/reports/RatingSpreadBar';
@@ -13,6 +15,7 @@ import {
 } from '@/lib/reports-data';
 
 export const metadata = { title: 'Reports · M3M Perform' };
+export const dynamic = 'force-dynamic';
 
 const PATTERN_CHIP = {
   navy: undefined,
@@ -38,7 +41,11 @@ function FilterPill({ children }: { children: string }) {
   );
 }
 
-export default function ReportsPage() {
+export default async function ReportsPage() {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (session.user.role !== 'HR') forbidden();
+
   return (
     <>
       <ScreenHeader

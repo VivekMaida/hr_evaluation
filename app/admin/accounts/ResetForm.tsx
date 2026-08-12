@@ -12,7 +12,7 @@ function ResetButton({ claimed }: { claimed: boolean }) {
       className="btn btn--secondary"
       style={{ fontSize: 13.5, padding: '7px 14px' }}
       disabled={pending || !claimed}
-      title={claimed ? undefined : 'Already awaiting first sign-in'}
+      title={claimed ? undefined : 'Already on the default password'}
     >
       {pending ? 'Resetting…' : 'Reset password'}
     </button>

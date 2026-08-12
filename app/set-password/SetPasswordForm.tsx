@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { authenticate, type LoginState } from './actions';
+import { setPassword, type SetPasswordState } from './actions';
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -13,65 +13,51 @@ function SubmitButton() {
       disabled={pending}
       style={{ justifyContent: 'center', width: '100%' }}
     >
-      {pending ? 'Signing in…' : 'Sign in'}
+      {pending ? 'Saving…' : 'Continue'}
     </button>
   );
 }
 
-export function LoginForm({ hrEmail }: { hrEmail: string | null }) {
-  const [state, formAction] = useActionState<LoginState, FormData>(authenticate, {
+export function SetPasswordForm() {
+  const [state, formAction] = useActionState<SetPasswordState, FormData>(setPassword, {
     error: null,
   });
 
   return (
     <form action={formAction} className="stack" style={{ gap: 16 }}>
       <div className="stack" style={{ gap: 6 }}>
-        <label htmlFor="email" style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy)' }}>
-          Work email
+        <label htmlFor="next" style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy)' }}>
+          New password
         </label>
         <input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="username"
-          required
-          placeholder="first.last@m3mindia.com"
-          className="field"
-          style={{ fontSize: 15, padding: '11px 12px' }}
-        />
-      </div>
-
-      <div className="stack" style={{ gap: 6 }}>
-        <label
-          htmlFor="password"
-          style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy)' }}
-        >
-          Password
-        </label>
-        <input
-          id="password"
-          name="password"
+          id="next"
+          name="next"
           type="password"
-          autoComplete="current-password"
+          autoComplete="new-password"
           required
           minLength={8}
           className="field"
           style={{ fontSize: 15, padding: '11px 12px' }}
         />
         <div style={{ fontSize: 13, color: 'var(--grey-body)', lineHeight: 1.5 }}>
-          Forgotten your password? Contact HR
-          {hrEmail ? (
-            <>
-              {' '}
-              (
-              <a href={`mailto:${hrEmail}`} style={{ fontWeight: 700, color: 'var(--navy)' }}>
-                {hrEmail}
-              </a>
-              )
-            </>
-          ) : null}
-          .
+          At least 8 characters. Do not reuse the default password you were given.
         </div>
+      </div>
+
+      <div className="stack" style={{ gap: 6 }}>
+        <label htmlFor="confirm" style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy)' }}>
+          Confirm password
+        </label>
+        <input
+          id="confirm"
+          name="confirm"
+          type="password"
+          autoComplete="new-password"
+          required
+          minLength={8}
+          className="field"
+          style={{ fontSize: 15, padding: '11px 12px' }}
+        />
       </div>
 
       {state.error ? (

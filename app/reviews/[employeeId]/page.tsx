@@ -1,13 +1,40 @@
+import { forbidden, notFound, redirect } from 'next/navigation';
+import { auth } from '@/auth';
+import { EmptyState } from '@/components/EmptyState';
+import { ScreenHeader } from '@/components/ScreenHeader';
 import { ReviewScreen } from '@/components/reviews/ReviewScreen';
-import { LINKED_EMPLOYEE_IDS } from '@/lib/scorecard-data';
+import { canAccessEmployee } from '@/lib/access';
+import { getReviewData } from '@/lib/reviews';
 
 export const metadata = { title: 'Reviews · M3M Perform' };
+export const dynamic = 'force-dynamic';
 
-export function generateStaticParams() {
-  return LINKED_EMPLOYEE_IDS.map((employeeId) => ({ employeeId }));
-}
+export default async function ReviewForEmployeePage({
+  params,
+}: {
+  params: Promise<{ employeeId: string }>;
+}) {
+  const { employeeId } = await params;
 
-/** One drawn record so far; the roster routes here for everyone. */
-export default function ReviewForEmployeePage() {
-  return <ReviewScreen />;
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (!(await canAccessEmployee(session.user, employeeId, false))) forbidden();
+
+  const data = await getReviewData(employeeId);
+  if (!data) notFound();
+
+  if (!data.subject) {
+    return (
+      <>
+        <ScreenHeader title="Reviews" meta="Annual appraisal FY 2025–26" />
+        <EmptyState
+          label="Nothing to review yet"
+          heading={`${data.employee.name} has no submitted months this year`}
+          body="A rating needs at least one submitted month on record before there is anything to review."
+        />
+      </>
+    );
+  }
+
+  return <ReviewScreen subject={data.subject} />;
 }

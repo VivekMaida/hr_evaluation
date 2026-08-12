@@ -144,9 +144,12 @@ export function UploadStepDone({ onRestart }: { onRestart: () => void }) {
               <strong style={{ color: 'var(--navy)' }}>Vivek Anand</strong>. They are still
               outstanding for February.
             </div>
-            <Link href="/my-team" style={{ flex: 'none', fontSize: 13.5, fontWeight: 700 }}>
+            <span
+              style={{ flex: 'none', fontSize: 13.5, fontWeight: 700, color: 'var(--grey-line)' }}
+              title="My Team has not been designed yet"
+            >
               Open My Team
-            </Link>
+            </span>
           </div>
         </div>
       </Card>
@@ -160,13 +163,14 @@ export function UploadStepDone({ onRestart }: { onRestart: () => void }) {
         >
           Upload another file
         </button>
-        <Link
-          href="/my-team"
+        <span
           className="btn btn--primary btn--large"
-          style={{ textDecoration: 'none' }}
+          style={{ textDecoration: 'none', opacity: 0.5, cursor: 'not-allowed' }}
+          aria-disabled="true"
+          title="My Team has not been designed yet"
         >
           Back to My Team
-        </Link>
+        </span>
       </div>
     </div>
   );

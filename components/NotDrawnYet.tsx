@@ -14,7 +14,7 @@ export function NotDrawnYet({
   summary,
 }: {
   title: string;
-  meta: string;
+  meta?: string;
   summary: string;
 }) {
   return (

@@ -1,11 +1,18 @@
 import Link from 'next/link';
+import { forbidden, redirect } from 'next/navigation';
+import { auth } from '@/auth';
 import { EmptyState } from '@/components/EmptyState';
 import { ScreenHeader } from '@/components/ScreenHeader';
 
 export const metadata = { title: 'No targets published · M3M Perform' };
+export const dynamic = 'force-dynamic';
 
 /** 08a — a lead opens a month before Admin has published the KRA set. */
-export default function NoTargetsPage() {
+export default async function NoTargetsPage() {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (session.user.role === 'EMPLOYEE') forbidden();
+
   return (
     <>
       <ScreenHeader

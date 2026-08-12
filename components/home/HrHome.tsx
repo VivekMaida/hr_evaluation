@@ -396,13 +396,13 @@ export function HrHome() {
                     </div>
                     <div className="row" style={{ gap: 12, marginTop: 6 }}>
                       {item.links.map((label) => (
-                        <Link
+                        <span
                           key={label}
-                          href="/calibration"
-                          style={{ fontSize: 13.5, fontWeight: 700 }}
+                          style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--grey-line)' }}
+                          title="Calibration has not been designed yet"
                         >
                           {label}
-                        </Link>
+                        </span>
                       ))}
                     </div>
                   </div>

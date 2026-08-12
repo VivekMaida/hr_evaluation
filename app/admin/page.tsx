@@ -1,10 +1,17 @@
 import Link from 'next/link';
+import { forbidden, redirect } from 'next/navigation';
+import { auth } from '@/auth';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Card, SectionLabel } from '@/components/ui';
 
 export const metadata = { title: 'Admin · M3M Perform' };
+export const dynamic = 'force-dynamic';
 
-export default function AdminPage() {
+export default async function AdminPage() {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (session.user.role !== 'HR') forbidden();
+
   return (
     <>
       <ScreenHeader title="Admin" meta="KPI master, cycles and accounts · HR only" />

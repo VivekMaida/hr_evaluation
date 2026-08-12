@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Card, Chip, SectionLabel } from '@/components/ui';
 import { prisma } from '@/lib/db';
+import { PILOT_DEFAULT_PASSWORD } from '@/lib/pilot-auth';
 import { ResetForm } from './ResetForm';
 
 export const metadata = { title: 'Accounts · M3M Perform' };
@@ -33,23 +34,25 @@ export default async function AccountsPage() {
     orderBy: [{ role: 'asc' }, { email: 'asc' }],
   });
 
-  const awaiting = users.filter((u) => u.passwordHash === null).length;
+  const awaiting = users.filter((u) => u.mustSetPassword).length;
 
   return (
     <>
       <ScreenHeader
         title="Accounts"
-        meta={`${users.length} pilot accounts · ${awaiting} awaiting first sign-in`}
+        meta={`${users.length} pilot accounts · ${awaiting} on the default password`}
       />
 
       <div style={{ padding: '26px 36px 34px', display: 'flex', flexDirection: 'column', gap: 20 }}>
         <div className="callout callout--info" style={{ padding: '16px 20px' }}>
           <div className="callout__title">How reset works</div>
           <div style={{ fontSize: 14, lineHeight: 1.55, color: 'var(--grey-body)' }}>
-            Resetting clears the password and puts the account back into first-sign-in
-            state — the person then chooses a new one the next time they sign in. Tell them
-            directly; the pilot sends no email. Every reset is recorded in the activity log
-            against your name.
+            Every pilot account starts on the shared default password (
+            <code className="num">{PILOT_DEFAULT_PASSWORD}</code>) and must be changed on
+            first sign-in. Resetting puts an account back on that default and forces the
+            same choose-a-password step on their next sign-in. Tell them directly; the
+            pilot sends no email. Every reset is recorded in the activity log against your
+            name.
           </div>
         </div>
 
@@ -57,7 +60,7 @@ export default async function AccountsPage() {
           <div className="spread" style={{ alignItems: 'baseline', marginBottom: 16 }}>
             <SectionLabel>Pilot accounts</SectionLabel>
             <span className="num" style={{ fontSize: 13, color: 'var(--grey-body)' }}>
-              {users.length - awaiting} of {users.length} claimed
+              {users.length - awaiting} of {users.length} personalized
             </span>
           </div>
 
@@ -74,7 +77,7 @@ export default async function AccountsPage() {
             </thead>
             <tbody>
               {users.map((user) => {
-                const claimed = user.passwordHash !== null;
+                const claimed = !user.mustSetPassword;
                 return (
                   <tr key={user.id}>
                     <td style={{ padding: '10px 12px' }}>
@@ -87,13 +90,13 @@ export default async function AccountsPage() {
                     </td>
                     <td style={{ padding: '10px 12px' }}>{user.email}</td>
                     <td style={{ padding: '10px 12px' }}>
-                      <Chip tone={user.role === 'HR' ? 'cyan' : user.role === 'LEAD' ? 'navy' : 'grey'} tight>
+                      <Chip tone={user.role === 'HR' ? 'cyan' : user.role === 'MANAGER' ? 'navy' : 'grey'} tight>
                         {user.role}
                       </Chip>
                     </td>
                     <td style={{ padding: '10px 12px' }}>
                       <Chip tone={claimed ? 'green' : 'amber'} tight>
-                        {claimed ? 'Password set' : 'Awaiting first sign-in'}
+                        {claimed ? 'Password set' : 'Default password'}
                       </Chip>
                     </td>
                     <td className="num" style={{ padding: '10px 12px', color: 'var(--grey-body)' }}>

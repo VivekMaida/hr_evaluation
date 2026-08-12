@@ -12,7 +12,7 @@ import {
   matrixCellColour,
   trendLabel,
   type ScorecardSubject,
-} from '@/lib/scorecard-data';
+} from '@/lib/scorecard';
 import { consistency, halves, signed, trend } from '@/lib/score';
 
 const MONTH_HEADS = FY_MONTHS.map((m) => m.toUpperCase());
@@ -389,11 +389,11 @@ export function Scorecard({ subject }: { subject: ScorecardSubject }) {
                         style={{
                           padding: '11px 4px',
                           textAlign: 'center',
-                          color: matrixCellColour(value),
-                          fontWeight: value < 70 || value > 120 ? 700 : 400,
+                          color: value === null ? 'var(--grey-line)' : matrixCellColour(value),
+                          fontWeight: value !== null && (value < 70 || value > 120) ? 700 : 400,
                         }}
                       >
-                        {value}
+                        {value === null ? '—' : value}
                       </td>
                     ))}
                     {/* February is open; March is not yet reached. */}
@@ -414,9 +414,13 @@ export function Scorecard({ subject }: { subject: ScorecardSubject }) {
                     </td>
                     <td
                       className="is-num"
-                      style={{ padding: '11px 12px', fontWeight: 700, color: 'var(--navy)' }}
+                      style={{
+                        padding: '11px 12px',
+                        fontWeight: 700,
+                        color: row.average === null ? 'var(--grey-line)' : 'var(--navy)',
+                      }}
                     >
-                      {row.average.toFixed(1)}
+                      {row.average === null ? '—' : row.average.toFixed(1)}
                     </td>
                   </tr>
                 ))}
@@ -436,10 +440,10 @@ export function Scorecard({ subject }: { subject: ScorecardSubject }) {
                         padding: '12px 4px',
                         textAlign: 'center',
                         fontWeight: 700,
-                        color: 'var(--navy)',
+                        color: value === null ? 'var(--grey-line)' : 'var(--navy)',
                       }}
                     >
-                      {value}
+                      {value === null ? '—' : value}
                     </td>
                   ))}
                   <td

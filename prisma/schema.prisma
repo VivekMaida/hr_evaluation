@@ -21,7 +21,7 @@ datasource db {
 
 enum Role {
   EMPLOYEE
-  LEAD
+  MANAGER
   HR
 }
 
@@ -70,7 +70,7 @@ model Employee {
 model User {
   id    String @id @default(cuid())
   email String @unique
-  role  Role   @default(LEAD)
+  role  Role   @default(MANAGER)
 
   /// Null until the person sets a password on first login. Seeded users start
   /// null: HR creates the account, the employee chooses the secret.

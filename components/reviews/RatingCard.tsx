@@ -7,7 +7,7 @@ import {
   JUSTIFICATION_MIN_CHARS,
   impliedBand,
   type Band,
-} from '@/lib/reviews-data';
+} from '@/lib/reviews';
 
 function BandButton({
   band,

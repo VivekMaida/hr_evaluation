@@ -2,6 +2,7 @@ import Image from 'next/image';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { asset } from '@/lib/base-path';
+import { prisma } from '@/lib/db';
 import { SectionLabel } from '@/components/ui';
 import { LoginForm } from './LoginForm';
 
@@ -9,7 +10,16 @@ export const metadata = { title: 'Sign in · M3M Perform' };
 
 export default async function LoginPage() {
   const session = await auth();
-  if (session?.user) redirect('/');
+  if (session?.user) {
+    redirect(session.user.mustSetPassword ? '/set-password' : '/');
+  }
+
+  // No dedicated HR contact config exists; use the seeded HR account email.
+  const hr = await prisma.user.findFirst({
+    where: { role: 'HR' },
+    select: { email: true },
+    orderBy: { email: 'asc' },
+  });
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--white)' }}>
@@ -114,7 +124,7 @@ export default async function LoginPage() {
               Sign in
             </h1>
           </div>
-          <LoginForm />
+          <LoginForm hrEmail={hr?.email ?? null} />
         </div>
       </div>
     </div>

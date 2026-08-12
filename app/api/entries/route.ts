@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '@/auth';
+import { canAccessEmployee } from '@/lib/access';
 import { prisma } from '@/lib/db';
 import { blockers, buildRows, weightedScoreOf } from '@/lib/entries';
 
@@ -31,22 +32,6 @@ const saveBody = z.object({
   submit: z.boolean().default(false),
 });
 
-/** A lead may act for their own team; HR for anyone; everyone may read themselves. */
-async function canAccess(
-  actor: { employeeId: string; role: string },
-  employeeId: string,
-  write: boolean,
-): Promise<boolean> {
-  if (actor.role === 'HR') return true;
-  if (actor.employeeId === employeeId) return !write;
-  if (actor.role !== 'LEAD') return false;
-  const target = await prisma.employee.findUnique({
-    where: { id: employeeId },
-    select: { leadId: true },
-  });
-  return target?.leadId === actor.employeeId;
-}
-
 export async function GET(request: Request) {
   const session = await auth();
   if (!session?.user) {
@@ -63,7 +48,7 @@ export async function GET(request: Request) {
   }
   const { employeeId, monthIndex } = parsed.data;
 
-  if (!(await canAccess(session.user, employeeId, false))) {
+  if (!(await canAccessEmployee(session.user, employeeId, false))) {
     return NextResponse.json({ error: 'Not your team' }, { status: 403 });
   }
 
@@ -125,7 +110,7 @@ export async function POST(request: Request) {
   }
   const { employeeId, monthIndex, rows: input, submit } = parsed.data;
 
-  if (!(await canAccess(session.user, employeeId, true))) {
+  if (!(await canAccessEmployee(session.user, employeeId, true))) {
     return NextResponse.json({ error: 'Not your team' }, { status: 403 });
   }
 

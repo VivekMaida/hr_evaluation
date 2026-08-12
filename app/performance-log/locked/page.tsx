@@ -1,8 +1,11 @@
 import Link from 'next/link';
+import { forbidden, redirect } from 'next/navigation';
+import { auth } from '@/auth';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Card, Chip } from '@/components/ui';
 
 export const metadata = { title: 'January 2026 · locked · M3M Perform' };
+export const dynamic = 'force-dynamic';
 
 /**
  * 08b — a lead opens a month that closed. No line-art: the screen holds real
@@ -15,7 +18,11 @@ const LOCKED_ROWS = [
   { kra: 'Collection against demand raised', unit: '%', weight: 20, target: '85', actual: '84', achievement: '98.8%' },
 ];
 
-export default function LockedMonthPage() {
+export default async function LockedMonthPage() {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (session.user.role === 'EMPLOYEE') forbidden();
+
   return (
     <>
       <ScreenHeader

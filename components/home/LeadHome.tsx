@@ -130,9 +130,12 @@ export function LeadHome() {
               style={{ alignItems: 'baseline', marginBottom: 16 }}
             >
               <SectionLabel>My Team · {OPEN_MONTH_LABEL}</SectionLabel>
-              <Link href="/my-team" style={{ fontSize: 13.5, fontWeight: 700 }}>
+              <span
+                style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--grey-line)' }}
+                title="My Team has not been designed yet"
+              >
                 Open My Team
-              </Link>
+              </span>
             </div>
 
             <table className="data-table" style={{ fontSize: 14.5 }}>
