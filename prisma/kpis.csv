@@ -1,2 +1,16 @@
 employeeId,name,basis,unit,weight,target,type,sortOrder
-EXAMPLE-0001,Replace this KRA,Description shown under the KRA name on the entry form,%,100,100,higher-is-better,1
+EMP-30003,Booking value achieved,Value of bookings closed in the month,₹ Cr,30,12,higher-is-better,1
+EMP-30003,Units sold,Number of units booked,,20,8,higher-is-better,2
+EMP-30003,Collection against demand raised,Percentage of raised demand collected,%,20,85,higher-is-better,3
+EMP-30003,Site visit to booking conversion,Percentage of site visits converting to bookings,%,15,12,higher-is-better,4
+EMP-30003,Lead response TAT,Average hours to first response on a new lead,hrs,15,4,lower-is-better,5
+EMP-30004,Booking value achieved,Value of bookings closed in the month,₹ Cr,30,7,higher-is-better,1
+EMP-30004,Units sold,Number of units booked,,20,5,higher-is-better,2
+EMP-30004,Collection against demand raised,Percentage of raised demand collected,%,20,85,higher-is-better,3
+EMP-30004,Site visit to booking conversion,Percentage of site visits converting to bookings,%,15,10,higher-is-better,4
+EMP-30004,Lead response TAT,Average hours to first response on a new lead,hrs,15,4,lower-is-better,5
+EMP-30005,Booking value achieved,Value of bookings closed in the month,₹ Cr,30,4,higher-is-better,1
+EMP-30005,Units sold,Number of units booked,,20,3,higher-is-better,2
+EMP-30005,Collection against demand raised,Percentage of raised demand collected,%,20,80,higher-is-better,3
+EMP-30005,Site visit to booking conversion,Percentage of site visits converting to bookings,%,15,9,higher-is-better,4
+EMP-30005,Lead response TAT,Average hours to first response on a new lead,hrs,15,5,lower-is-better,5

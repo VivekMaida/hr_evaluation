@@ -36,7 +36,7 @@ export default async function PerformanceLogPage({
   // "signed-in manager's own team" boundary as Home.
   const team =
     session.user.role === 'MANAGER'
-      ? await getManagerTeam(session.user.employeeId, FISCAL_YEAR)
+      ? (await getManagerTeam(session.user.employeeId, FISCAL_YEAR)).team
       : [];
 
   // A manager lands on the first person in their team who is not yet

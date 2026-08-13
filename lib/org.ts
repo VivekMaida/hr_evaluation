@@ -1,3 +1,4 @@
+import { now } from './constants';
 import { prisma } from './db';
 
 /* ---------------------------------------------------------------------------
@@ -51,27 +52,33 @@ export type OrgCompleteness = {
 };
 
 export async function getOrgCompleteness(fiscalYear: string): Promise<OrgCompleteness> {
-  const [employeesCount, leadsCount, departments, cycles] = await Promise.all([
+  // Flat, independent queries rather than department.findMany's nested
+  // `include` — a nested include over a filtered relation isn't a single
+  // SQL join here, it's several separate round trips hidden behind one line
+  // of code. Writing them out explicitly costs the same number of queries
+  // but lets them run as genuine siblings in the Promise.all below instead
+  // of one one branch secretly being three sequential steps.
+  const [employeesCount, leadsCount, departments, employees, kpiEmployeeIds, cycles] = await Promise.all([
     prisma.employee.count(),
     prisma.user.count({ where: { role: 'MANAGER' } }),
-    prisma.department.findMany({
-      include: {
-        employees: {
-          select: { id: true, kpis: { where: { fiscalYear }, select: { id: true } } },
-        },
-      },
-    }),
+    prisma.department.findMany({ select: { id: true, name: true } }),
+    prisma.employee.findMany({ select: { id: true, departmentId: true } }),
+    prisma.kpi.findMany({ where: { fiscalYear }, select: { employeeId: true }, distinct: ['employeeId'] }),
     prisma.cycle.findMany({ where: { fiscalYear }, orderBy: { monthIndex: 'asc' } }),
   ]);
 
   const openCycle = cycles.find((c) => c.state === 'OPEN') ?? null;
   const lockedCycles = cycles.filter((c) => c.state === 'LOCKED');
 
+  const eligibleIds = new Set(kpiEmployeeIds.map((k) => k.employeeId));
+  const employeeIdsByDept = new Map<string, string[]>();
+  for (const e of employees) {
+    if (!eligibleIds.has(e.id)) continue;
+    employeeIdsByDept.set(e.departmentId, [...(employeeIdsByDept.get(e.departmentId) ?? []), e.id]);
+  }
+
   const eligibleByDept = departments
-    .map((d) => ({
-      name: d.name,
-      employeeIds: d.employees.filter((e) => e.kpis.length > 0).map((e) => e.id),
-    }))
+    .map((d) => ({ name: d.name, employeeIds: employeeIdsByDept.get(d.id) ?? [] }))
     .filter((d) => d.employeeIds.length > 0);
 
   const allEligibleIds = eligibleByDept.flatMap((d) => d.employeeIds);
@@ -121,7 +128,7 @@ export async function getOrgCompleteness(fiscalYear: string): Promise<OrgComplet
   const daysLeftLabel = openCycle?.locksOn
     ? `locks in ${Math.max(
         0,
-        Math.ceil((openCycle.locksOn.getTime() - Date.now()) / 86_400_000),
+        Math.ceil((openCycle.locksOn.getTime() - now().getTime()) / 86_400_000),
       )} days`
     : null;
 
@@ -164,7 +171,7 @@ export async function getPendingExceptions(): Promise<PendingException[]> {
     detail: r.detail,
     daysWaiting: Math.max(
       0,
-      Math.round((Date.now() - r.raisedAt.getTime()) / 86_400_000),
+      Math.round((now().getTime() - r.raisedAt.getTime()) / 86_400_000),
     ),
   }));
 }

@@ -19,7 +19,7 @@ export default async function PerformanceLogDonePage() {
   if (!session?.user) redirect('/login');
   if (session.user.role !== 'MANAGER') forbidden();
 
-  const team = await getManagerTeam(session.user.employeeId, FISCAL_YEAR);
+  const { team } = await getManagerTeam(session.user.employeeId, FISCAL_YEAR);
   const submitted = team.filter((m) => m.status === 'submitted');
   const outstanding = team.filter((m) => m.status !== 'submitted');
 

@@ -4,11 +4,10 @@
  * `canAccessEmployee()`; if a constant here starts describing someone's
  * record instead of the calendar, it belongs in a DB-backed module instead.
  *
- * The pilot runs on real wall-clock time — there is no fixed "today." Date
- * math against real Cycle rows uses `Date.now()` directly at the call site;
- * `todayLabel()` below is the one place "today," formatted for display, is
- * computed — as a function, not a constant, so it never freezes at server
- * start and goes stale.
+ * The pilot runs on real wall-clock time — there is no fixed "today." All
+ * date math (here, lib/org.ts, lib/team.ts, prisma/seed-pilot.ts) goes
+ * through `now()` below rather than calling `Date.now()`/`new Date()`
+ * directly, so there is exactly one place local preview can override it.
  */
 export const FISCAL_YEAR = '2026-27';
 export const FY_LABEL = `FY ${FISCAL_YEAR.replace('-', '–')}`;
@@ -17,9 +16,42 @@ const [FY_START_YEAR] = FISCAL_YEAR.split('-').map(Number);
 /** "April 2026 to March 2027" — the fiscal year's month range in prose. */
 export const FY_RANGE_LABEL = `April ${FY_START_YEAR} to March ${FY_START_YEAR + 1}`;
 
-/** Real wall-clock "today", formatted for display chrome (e.g. Home's header). */
+if (process.env.NODE_ENV !== 'production' && process.env.PREVIEW_NOW) {
+  console.warn(
+    `⚠ PREVIEW_NOW is set — pretending it's ${process.env.PREVIEW_NOW}. This must never be set ` +
+      `outside local development (see now() below). Re-run "npm run db:seed:pilot" after unsetting ` +
+      `it to restore the real Cycle state.`,
+  );
+}
+
+/**
+ * Real wall-clock time — except locally, where `PREVIEW_NOW` in .env.local
+ * can override it, e.g. to preview what Performance Log will look like on
+ * 1 September 2026 without hand-editing any stored Cycle row (which would
+ * just be overwritten the next time prisma/seed-pilot.ts runs anyway).
+ *
+ * Ignored whenever `NODE_ENV === 'production'`, so it cannot reach the
+ * deployed app even if the variable is somehow set there — Next.js sets
+ * that automatically for `next build`/`next start`; this only ever takes
+ * effect under `next dev` or a locally-run script, and only when you've
+ * deliberately set the variable in `.env.local`.
+ *
+ * To preview a date: set `PREVIEW_NOW=2026-09-01T00:00:00+05:30` in
+ * .env.local, run `npm run db:seed:pilot` (recomputes Cycle state as of
+ * that moment), then `npm run dev`. To switch back: remove the variable and
+ * run `npm run db:seed:pilot` again to restore the real state.
+ */
+export function now(): Date {
+  if (process.env.NODE_ENV !== 'production' && process.env.PREVIEW_NOW) {
+    const override = new Date(process.env.PREVIEW_NOW);
+    if (!Number.isNaN(override.getTime())) return override;
+  }
+  return new Date();
+}
+
+/** "Today", formatted for display chrome (e.g. Home's header) — see now(). */
 export function todayLabel(): string {
-  return new Date().toLocaleDateString('en-IN', {
+  return now().toLocaleDateString('en-IN', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',

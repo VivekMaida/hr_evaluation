@@ -28,7 +28,7 @@ import bcrypt from 'bcryptjs';
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';
 import { PrismaClient, type KpiType, type Role } from '@prisma/client';
-import { FISCAL_YEAR } from '../lib/constants';
+import { FISCAL_YEAR, now } from '../lib/constants';
 import { parseCsv } from '../lib/csv';
 import { calendarMonthFor, cycleStateFor, cycleWindowFor } from '../lib/cycles';
 import { BCRYPT_ROUNDS, PILOT_DEFAULT_PASSWORD } from '../lib/pilot-auth';
@@ -193,15 +193,21 @@ function validate(roster: RosterRow[], kpiRows: KpiRow[]): string[] {
  * no reason to gate them behind roster completeness; re-running this is also
  * exactly how a cycle's stored state actually advances, since nothing else
  * (no scheduled job) recomputes it between runs.
+ *
+ * Uses now() from lib/constants.ts, not `new Date()` directly — so a local
+ * PREVIEW_NOW override (see there) computes state as of the previewed
+ * moment instead of the real one. Re-run this once PREVIEW_NOW is unset to
+ * restore the real state.
  */
 async function seedCycles(): Promise<void> {
   const [fyStartYear] = FISCAL_YEAR.split('-').map(Number);
-  const now = new Date();
+  const asOf = now();
+  console.log(`  (computing cycle state as of ${asOf.toISOString()})`);
   for (let monthIndex = 5; monthIndex <= 12; monthIndex += 1) {
     const cal = calendarMonthFor(monthIndex, fyStartYear);
     const label = `${MONTH_NAMES[cal.month - 1]} ${cal.year}`;
     const window = cycleWindowFor(monthIndex, fyStartYear);
-    const state = cycleStateFor(window, now);
+    const state = cycleStateFor(window, asOf);
 
     await prisma.cycle.upsert({
       where: { fiscalYear_monthIndex: { fiscalYear: FISCAL_YEAR, monthIndex } },

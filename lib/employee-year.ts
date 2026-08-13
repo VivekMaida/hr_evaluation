@@ -89,6 +89,62 @@ export async function getEmployeeCycleScores(
 }
 
 /**
+ * Same shape as getEmployeeCycleScores, for many employees in one call — one
+ * Cycle query and one Submission query total, not one pair per employee.
+ * Every DB round trip to this Neon instance costs ~150-200ms, and opening
+ * the *first* few concurrent connections a request needs costs seconds, not
+ * milliseconds (that cost is paid once the pool has grown to size, not
+ * again after) — so a manager's team of N reports calling
+ * getEmployeeCycleScores once each, as getManagerTeam used to, was N
+ * redundant identical Cycle queries and N-way concurrency for no reason.
+ * Used by getManagerTeam.
+ */
+export async function getEmployeeCycleScoresBatch(
+  employeeIds: string[],
+  fiscalYear: string,
+): Promise<{ scoresByEmployee: Map<string, CycleScore[]>; cycles: Awaited<ReturnType<typeof prisma.cycle.findMany>> }> {
+  const [cycles, submissions] = await Promise.all([
+    prisma.cycle.findMany({
+      where: { fiscalYear },
+      orderBy: { monthIndex: 'asc' },
+    }),
+    prisma.submission.findMany({
+      where: { employeeId: { in: employeeIds }, state: 'SUBMITTED', cycle: { fiscalYear } },
+    }),
+  ]);
+
+  const byEmployee = new Map<string, Map<string, (typeof submissions)[number]>>();
+  for (const s of submissions) {
+    if (!byEmployee.has(s.employeeId)) byEmployee.set(s.employeeId, new Map());
+    byEmployee.get(s.employeeId)!.set(s.cycleId, s);
+  }
+
+  const scoresByEmployee = new Map<string, CycleScore[]>();
+  for (const employeeId of employeeIds) {
+    const byCycle = byEmployee.get(employeeId);
+    scoresByEmployee.set(
+      employeeId,
+      cycles.map((cycle) => {
+        const submission = byCycle?.get(cycle.id);
+        return {
+          cycleId: cycle.id,
+          monthIndex: cycle.monthIndex,
+          label: cycle.label,
+          state: cycle.state,
+          weightedScore:
+            submission?.weightedScore === undefined || submission.weightedScore === null
+              ? null
+              : Number(submission.weightedScore),
+          submittedAt: submission?.submittedAt ?? null,
+        };
+      }),
+    );
+  }
+
+  return { scoresByEmployee, cycles };
+}
+
+/**
  * Always all twelve slots, regardless of how many Cycle rows actually exist
  * for the fiscal year — a month before `fromIndex`, or one with no matching
  * Cycle row at all, renders `not-applicable` rather than being dropped, so

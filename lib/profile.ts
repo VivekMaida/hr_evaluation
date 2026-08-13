@@ -69,11 +69,22 @@ function firstName(name: string): string {
 
 /** Returns null only when the employee (or their account) doesn't exist. */
 export async function getProfileData(employeeId: string): Promise<ProfileData | null> {
-  const employee = await prisma.employee.findUnique({
-    where: { id: employeeId },
-    include: { department: true, lead: true, user: true },
-  });
-  if (!employee || !employee.user) return null;
+  // department/lead/user as their own parallel queries rather than a nested
+  // `include` — that isn't a SQL join here, it's three more sequential round
+  // trips hidden behind one line. Department has only a couple of rows;
+  // fetching all of them is cheaper than the include either way. `user` and
+  // `departments` don't depend on `employee` resolving, so all three run
+  // together; only `lead` genuinely needs employee.leadId first.
+  const [employee, user, departments] = await Promise.all([
+    prisma.employee.findUnique({ where: { id: employeeId } }),
+    prisma.user.findUnique({ where: { employeeId } }),
+    prisma.department.findMany(),
+  ]);
+  if (!employee || !user) return null;
+  const department = departments.find((d) => d.id === employee.departmentId);
+  const lead = employee.leadId
+    ? await prisma.employee.findUnique({ where: { id: employee.leadId }, select: { name: true } })
+    : null;
 
   const [scores, kpiRows, acknowledgements] = await Promise.all([
     getEmployeeCycleScores(employeeId, FISCAL_YEAR),
@@ -125,28 +136,28 @@ export async function getProfileData(employeeId: string): Promise<ProfileData | 
     identity: {
       id: employee.id,
       name: employee.name,
-      email: employee.user.email,
+      email: user.email,
       title: employee.title,
       departmentId: employee.departmentId,
-      department: employee.department.name,
+      department: department?.name ?? '—',
       leadId: employee.leadId,
-      managerName: employee.lead?.name ?? null,
+      managerName: lead?.name ?? null,
       joinedOn: employee.joinedOn,
       location: employee.location,
-      role: employee.user.role,
+      role: user.role,
     },
     thisCycle,
     kpis,
     acknowledgements,
     record,
-    lastLoginAtLabel: employee.user.lastLoginAt
-      ? employee.user.lastLoginAt.toLocaleString('en-IN', {
+    lastLoginAtLabel: user.lastLoginAt
+      ? user.lastLoginAt.toLocaleString('en-IN', {
           day: 'numeric',
           month: 'short',
           hour: 'numeric',
           minute: '2-digit',
         })
       : null,
-    mustSetPassword: employee.user.mustSetPassword,
+    mustSetPassword: user.mustSetPassword,
   };
 }

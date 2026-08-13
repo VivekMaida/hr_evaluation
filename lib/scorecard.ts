@@ -143,11 +143,19 @@ export async function getScorecardData(
   employeeId: string,
   options: { maskOpenCycleData?: boolean } = {},
 ): Promise<ScorecardData | null> {
-  const employee = await prisma.employee.findUnique({
-    where: { id: employeeId },
-    include: { department: true, lead: true },
-  });
+  // department/lead as their own parallel queries rather than a nested
+  // `include` — that isn't a SQL join here, it's two more sequential round
+  // trips hidden behind one line. Department has only a couple of rows;
+  // fetching all of them is cheaper than the include either way.
+  const [employee, departments] = await Promise.all([
+    prisma.employee.findUnique({ where: { id: employeeId } }),
+    prisma.department.findMany(),
+  ]);
   if (!employee) return null;
+  const department = departments.find((d) => d.id === employee.departmentId);
+  const lead = employee.leadId
+    ? await prisma.employee.findUnique({ where: { id: employee.leadId }, select: { name: true } })
+    : null;
 
   const base = { id: employee.id, name: employee.name, title: employee.title };
 
@@ -170,10 +178,10 @@ export async function getScorecardData(
   const average = computeYearAverage(scores) as number;
 
   const identityParts = [
-    `${employee.title}, ${employee.department.name}`,
+    `${employee.title}, ${department?.name ?? '—'}`,
     employee.id,
     ...(employee.location ? [employee.location] : []),
-    ...(employee.lead ? [`Reports to ${employee.lead.name}`] : []),
+    ...(lead ? [`Reports to ${lead.name}`] : []),
     `KRA set ${FY_LABEL}`,
   ];
 
@@ -200,9 +208,9 @@ export async function getScorecardData(
   const lockedScores = scores.filter((s) => s.monthIndex >= fromIndex && s.state === 'LOCKED');
   const monthsLocked = lockedScores.filter((s) => s.weightedScore !== null).length;
 
+  // `cycle` was never read off these rows — the join was pure overhead.
   const entries = await prisma.monthlyEntry.findMany({
     where: { employeeId, cycle: { fiscalYear: FISCAL_YEAR, state: 'LOCKED' } },
-    include: { cycle: true },
   });
   const entriesByKpiAndCycle = new Map(entries.map((e) => [`${e.kpiId}:${e.cycleId}`, e]));
 

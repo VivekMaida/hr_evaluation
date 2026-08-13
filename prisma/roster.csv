@@ -1,2 +1,6 @@
 employeeId,name,email,title,department,location,joinedOn,leadId,role
-EXAMPLE-0001,Replace This Row,replace.this.row@example.com,Designation,Department name,City,2020-01-15,,MANAGER
+EMP-30001,Priya Deshmukh,priya.test@m3mindia.com,Head of Performance,Human Resources,Gurugram,2019-04-01,,HR
+EMP-30002,Ananya Mehra,ananya.test@m3mindia.com,Team Lead,Sales,Gurugram,2020-06-15,,MANAGER
+EMP-30003,Kavita Nair,kavita.test@m3mindia.com,Sales Manager,Sales,Gurugram,2021-03-01,EMP-30002,EMPLOYEE
+EMP-30004,Arjun Menon,arjun.test@m3mindia.com,Assistant Manager,Sales,Gurugram,2022-08-10,EMP-30002,EMPLOYEE
+EMP-30005,Deepa Raghavan,deepa.test@m3mindia.com,Senior Sales Executive,Sales,Gurugram,2026-02-10,EMP-30002,EMPLOYEE

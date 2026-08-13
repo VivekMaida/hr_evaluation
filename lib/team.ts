@@ -1,6 +1,7 @@
+import { now } from './constants';
 import { prisma } from './db';
 import { blockers, buildRows, weightedScoreOf } from './entries';
-import { getEmployeeCycleScores, pointsFromCycleScores } from './employee-year';
+import { getEmployeeCycleScoresBatch, pointsFromCycleScores } from './employee-year';
 import type { MonthPoint } from './types';
 
 /* ---------------------------------------------------------------------------
@@ -35,31 +36,37 @@ export type TeamMemberRow = {
   points: MonthPoint[];
 };
 
+export type ManagerTeam = {
+  team: TeamMemberRow[];
+  /** This fiscal year's cycles — already fetched to build `team`; reuse this instead of querying again. */
+  cycles: Awaited<ReturnType<typeof prisma.cycle.findMany>>;
+};
+
 /** This manager's direct reports, with each one's status for the open cycle. */
-export async function getManagerTeam(
-  managerId: string,
-  fiscalYear: string,
-): Promise<TeamMemberRow[]> {
+export async function getManagerTeam(managerId: string, fiscalYear: string): Promise<ManagerTeam> {
   const reports = await prisma.employee.findMany({
     where: { leadId: managerId },
     orderBy: { id: 'asc' },
     select: { id: true, name: true, title: true },
   });
-  if (reports.length === 0) return [];
-
   const reportIds = reports.map((r) => r.id);
 
-  const [allScores, kpis] = await Promise.all([
-    Promise.all(reports.map((r) => getEmployeeCycleScores(r.id, fiscalYear))),
+  // One Cycle query and one Submission query for the whole team, not one
+  // pair per report — see getEmployeeCycleScoresBatch's own comment for why
+  // that matters here specifically.
+  const [{ scoresByEmployee, cycles }, kpis] = await Promise.all([
+    getEmployeeCycleScoresBatch(reportIds, fiscalYear),
     prisma.kpi.findMany({
       where: { employeeId: { in: reportIds }, fiscalYear },
       orderBy: { sortOrder: 'asc' },
     }),
   ]);
 
+  if (reports.length === 0) return { team: [], cycles };
+
   // Every report's score list carries every cycle for the year — read the
-  // open one off the first report rather than running a separate cycle query.
-  const openCycleId = allScores[0]?.find((s) => s.state === 'OPEN')?.cycleId ?? null;
+  // open one off the shared cycle list rather than running a separate query.
+  const openCycleId = cycles.find((c) => c.state === 'OPEN')?.id ?? null;
 
   const entries = openCycleId
     ? await prisma.monthlyEntry.findMany({
@@ -79,8 +86,8 @@ export async function getManagerTeam(
     ]);
   }
 
-  return reports.map((report, i) => {
-    const scores = allScores[i];
+  const team = reports.map((report) => {
+    const scores = scoresByEmployee.get(report.id) ?? [];
     const points = pointsFromCycleScores(scores);
     const openScore = scores.find((s) => s.state === 'OPEN');
 
@@ -89,7 +96,7 @@ export async function getManagerTeam(
         id: report.id,
         name: report.name,
         title: report.title,
-        status: 'submitted',
+        status: 'submitted' as const,
         score: openScore.weightedScore,
         points,
       };
@@ -98,7 +105,7 @@ export async function getManagerTeam(
     const rows = buildRows(kpisByEmployee.get(report.id) ?? [], entriesByEmployee.get(report.id) ?? []);
     const someEntered = rows.some((r) => r.achievement !== null);
     if (!someEntered) {
-      return { id: report.id, name: report.name, title: report.title, status: 'not-started', score: null, points };
+      return { id: report.id, name: report.name, title: report.title, status: 'not-started' as const, score: null, points };
     }
 
     const { missingNotes } = blockers(rows);
@@ -107,14 +114,16 @@ export async function getManagerTeam(
         id: report.id,
         name: report.name,
         title: report.title,
-        status: 'note-pending',
+        status: 'note-pending' as const,
         score: weightedScoreOf(rows),
         points,
       };
     }
 
-    return { id: report.id, name: report.name, title: report.title, status: 'in-progress', score: null, points };
+    return { id: report.id, name: report.name, title: report.title, status: 'in-progress' as const, score: null, points };
   });
+
+  return { team, cycles };
 }
 
 function teamAverageForMonth(team: TeamMemberRow[], monthIndex: number): number | null {
@@ -144,16 +153,20 @@ export async function getLeadHomeData(
   managerId: string,
   fiscalYear: string,
 ): Promise<LeadHomeData | null> {
-  const manager = await prisma.employee.findUnique({
-    where: { id: managerId },
-    include: { department: true },
-  });
-  if (!manager) return null;
-
-  const [team, cycles] = await Promise.all([
-    getManagerTeam(managerId, fiscalYear),
-    prisma.cycle.findMany({ where: { fiscalYear }, orderBy: { monthIndex: 'asc' } }),
+  // Department only ever has a couple of rows — fetching all of them
+  // alongside the manager and looking one up in memory is one real round
+  // trip cheaper than `include: { department: true }`, which isn't a SQL
+  // join here: it's a second, sequential query hidden behind one line.
+  const [manager, departments] = await Promise.all([
+    prisma.employee.findUnique({ where: { id: managerId } }),
+    prisma.department.findMany(),
   ]);
+  if (!manager) return null;
+  const departmentName = departments.find((d) => d.id === manager.departmentId)?.name ?? '—';
+
+  // getManagerTeam already fetches this fiscal year's cycles to build the
+  // team — reuse them instead of a second, identical query.
+  const { team, cycles } = await getManagerTeam(managerId, fiscalYear);
 
   const openCycleRow = cycles.find((c) => c.state === 'OPEN') ?? null;
   const openCycle = openCycleRow
@@ -167,7 +180,7 @@ export async function getLeadHomeData(
             })
           : 'when HR closes the cycle',
         daysLeft: openCycleRow.locksOn
-          ? Math.max(0, Math.ceil((openCycleRow.locksOn.getTime() - Date.now()) / 86_400_000))
+          ? Math.max(0, Math.ceil((openCycleRow.locksOn.getTime() - now().getTime()) / 86_400_000))
           : null,
       }
     : null;
@@ -229,7 +242,7 @@ export async function getLeadHomeData(
     manager: {
       id: manager.id,
       name: manager.name,
-      department: manager.department.name,
+      department: departmentName,
       location: manager.location,
     },
     openCycle,
