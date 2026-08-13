@@ -1,4 +1,3 @@
-import { PILOT_TODAY } from './constants';
 import { prisma } from './db';
 import { blockers, buildRows, weightedScoreOf } from './entries';
 import { getEmployeeCycleScores, pointsFromCycleScores } from './employee-year';
@@ -167,9 +166,8 @@ export async function getLeadHomeData(
               month: 'long',
             })
           : 'when HR closes the cycle',
-        // Against the pilot's fixed "today", not the real clock — see PILOT_TODAY.
         daysLeft: openCycleRow.locksOn
-          ? Math.max(0, Math.ceil((openCycleRow.locksOn.getTime() - PILOT_TODAY.getTime()) / 86_400_000))
+          ? Math.max(0, Math.ceil((openCycleRow.locksOn.getTime() - Date.now()) / 86_400_000))
           : null,
       }
     : null;

@@ -1,6 +1,6 @@
 import type { Role } from '@prisma/client';
 import { getAcknowledgements, type AcknowledgementItem } from './acknowledgements';
-import { FY_LABEL, SHOW_PROFILE_RECORD } from './constants';
+import { FISCAL_YEAR, FY_LABEL, SHOW_PROFILE_RECORD } from './constants';
 import { prisma } from './db';
 import { getEmployeeCycleScores } from './employee-year';
 import { getScorecardData } from './scorecard';
@@ -11,8 +11,6 @@ import type { ScorecardSubject } from './scorecard';
    (the page) decides who that employeeId belongs to and whether they're
    allowed to see it; everything here just reads for whichever id it's given.
    --------------------------------------------------------------------------- */
-
-const FISCAL_YEAR = '2025-26';
 
 export type ProfileIdentity = {
   id: string;

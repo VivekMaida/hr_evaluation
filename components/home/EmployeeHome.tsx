@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { YearStrip } from '@/components/YearStrip';
 import { Screen, StatCard } from '@/components/ui';
+import { FY_LABEL } from '@/lib/constants';
 import type { EmployeeHomeData } from '@/lib/employee-home';
 import { consistencyLabel, coverageBand, trendLabel } from '@/lib/scorecard';
 import { consistency, signed, trend } from '@/lib/score';
@@ -57,7 +58,7 @@ export function EmployeeHome({ data }: { data: EmployeeHomeData }) {
             <YearStrip
               size="large"
               points={points}
-              label={`${employee.name}, FY 2025–26`}
+              label={`${employee.name}, ${FY_LABEL}`}
               highlightMonth={latestLocked?.month}
             />
           </div>

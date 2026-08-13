@@ -14,12 +14,11 @@
  */
 import bcrypt from 'bcryptjs';
 import { PrismaClient, type CycleState, type Role } from '@prisma/client';
+import { FISCAL_YEAR } from '../lib/constants';
 import { TEAM, CURRENT_USER, ENTRY_KRAS } from '../lib/data';
 import { BCRYPT_ROUNDS, PILOT_DEFAULT_PASSWORD } from '../lib/pilot-auth';
 
 const prisma = new PrismaClient();
-
-const FISCAL_YEAR = '2025-26';
 
 /** April first, always all twelve. Index 1 = April. */
 const MONTHS = [

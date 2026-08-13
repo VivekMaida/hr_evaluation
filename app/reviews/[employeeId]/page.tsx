@@ -4,7 +4,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { ReviewScreen } from '@/components/reviews/ReviewScreen';
 import { canAccessEmployee } from '@/lib/access';
-import { EMPLOYEE_RECORD_VISIBILITY } from '@/lib/constants';
+import { EMPLOYEE_RECORD_VISIBILITY, FY_LABEL } from '@/lib/constants';
 import { getReviewData, isFinalized } from '@/lib/reviews';
 
 export const metadata = { title: 'Reviews · M3M Perform' };
@@ -34,7 +34,7 @@ export default async function ReviewForEmployeePage({
   if (isEmployeeOwnRecord && !isFinalized(data.review.state)) {
     return (
       <>
-        <ScreenHeader title="Reviews" meta="Annual appraisal FY 2025–26" />
+        <ScreenHeader title="Reviews" meta={`Annual appraisal ${FY_LABEL}`} />
         <EmptyState
           label="Not finalized yet"
           heading="Your rating for this year has not been finalized"
@@ -47,7 +47,7 @@ export default async function ReviewForEmployeePage({
   if (!data.subject) {
     return (
       <>
-        <ScreenHeader title="Reviews" meta="Annual appraisal FY 2025–26" />
+        <ScreenHeader title="Reviews" meta={`Annual appraisal ${FY_LABEL}`} />
         <EmptyState
           label="Nothing to review yet"
           heading={`${data.employee.name} has no submitted months this year`}

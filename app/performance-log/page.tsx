@@ -5,13 +5,12 @@ import { EntryForm } from '@/components/log/EntryForm';
 import { EntryRouteSwitch } from '@/components/log/EntryRouteSwitch';
 import { TeamRail } from '@/components/log/TeamRail';
 import { canAccessEmployee } from '@/lib/access';
+import { FISCAL_YEAR } from '@/lib/constants';
 import { prisma } from '@/lib/db';
 import { getManagerTeam } from '@/lib/team';
 
 export const metadata = { title: 'Performance Log · M3M Perform' };
 export const dynamic = 'force-dynamic';
-
-const FISCAL_YEAR = '2025-26';
 
 export default async function PerformanceLogPage({
   searchParams,

@@ -1,4 +1,4 @@
-import { FY_LABEL } from './constants';
+import { FISCAL_YEAR, FY_LABEL } from './constants';
 import { prisma } from './db';
 import {
   getEmployeeCycleScores,
@@ -15,8 +15,6 @@ import type { MonthPoint } from './types';
    logic live here; getScorecardData() is the one place that reads the DB for
    this screen.
    --------------------------------------------------------------------------- */
-
-const FISCAL_YEAR = '2025-26';
 
 /** Coverage decides what the record may be used for. */
 export type CoverageBand = 'complete' | 'partial' | 'insufficient';

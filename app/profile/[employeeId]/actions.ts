@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { auth } from '@/auth';
+import { FISCAL_YEAR } from '@/lib/constants';
 import { prisma } from '@/lib/db';
 
 export type MasterState = { error: string | null; ok: boolean };
@@ -84,8 +85,6 @@ export async function updateEmployeeMaster(
   revalidatePath(`/profile/${employeeId}`);
   return { error: null, ok: true };
 }
-
-const FISCAL_YEAR = '2025-26';
 
 /** HR-only, and only for someone else's KPI set — see updateEmployeeMaster. */
 export async function updateKpiSet(_prev: MasterState, formData: FormData): Promise<MasterState> {

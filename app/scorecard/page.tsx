@@ -4,12 +4,10 @@ import { EmptyState } from '@/components/EmptyState';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Scorecard } from '@/components/scorecard/Scorecard';
 import { canAccessEmployee } from '@/lib/access';
-import { EMPLOYEE_RECORD_VISIBILITY } from '@/lib/constants';
+import { EMPLOYEE_RECORD_VISIBILITY, FISCAL_YEAR, FY_LABEL, FY_RANGE_LABEL } from '@/lib/constants';
 import { getContextNotes } from '@/lib/context-notes';
 import { getLockedMonthRows } from '@/lib/locked-months';
 import { getScorecardData } from '@/lib/scorecard';
-
-const FISCAL_YEAR = '2025-26';
 
 export const metadata = { title: 'Scorecard · M3M Perform' };
 export const dynamic = 'force-dynamic';
@@ -38,7 +36,7 @@ export default async function ScorecardIndexPage() {
   if (!data.subject) {
     return (
       <>
-        <ScreenHeader title="Scorecard" meta="FY 2025–26 · April 2025 to March 2026" />
+        <ScreenHeader title="Scorecard" meta={`${FY_LABEL} · ${FY_RANGE_LABEL}`} />
         <EmptyState
           label="Nothing logged yet"
           heading={`${data.employee.name} has no submitted months this year`}

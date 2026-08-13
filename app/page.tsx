@@ -3,14 +3,12 @@ import { auth } from '@/auth';
 import { EmployeeHome } from '@/components/home/EmployeeHome';
 import { HrHome } from '@/components/home/HrHome';
 import { LeadHome } from '@/components/home/LeadHome';
-import { EMPLOYEE_RECORD_VISIBILITY } from '@/lib/constants';
+import { EMPLOYEE_RECORD_VISIBILITY, FISCAL_YEAR } from '@/lib/constants';
 import { getEmployeeHomeData } from '@/lib/employee-home';
 import { getOrgCompleteness, getPendingExceptions } from '@/lib/org';
 import { getLeadHomeData } from '@/lib/team';
 
 export const dynamic = 'force-dynamic';
-
-const FISCAL_YEAR = '2025-26';
 
 export default async function HomePage() {
   const session = await auth();

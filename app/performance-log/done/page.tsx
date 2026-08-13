@@ -3,12 +3,11 @@ import { forbidden, redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Card, Chip, SectionLabel } from '@/components/ui';
+import { FISCAL_YEAR } from '@/lib/constants';
 import { STATUS_CHIP, getManagerTeam } from '@/lib/team';
 
 export const metadata = { title: 'Performance Log · M3M Perform' };
 export const dynamic = 'force-dynamic';
-
-const FISCAL_YEAR = '2025-26';
 
 /**
  * Reached at the end of a manager's auto-advance run through Performance

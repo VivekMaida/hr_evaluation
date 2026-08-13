@@ -1,6 +1,7 @@
 import { forbidden, redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { NotDrawnYet } from '@/components/NotDrawnYet';
+import { FY_LABEL } from '@/lib/constants';
 
 export const metadata = { title: 'Activity log · M3M Perform' };
 export const dynamic = 'force-dynamic';
@@ -13,7 +14,7 @@ export default async function ActivityPage() {
   return (
     <NotDrawnYet
       title="Activity log"
-      meta="FY 2025–26 · every write to the record"
+      meta={`${FY_LABEL} · every write to the record`}
       summary="Who entered what, when, and from which route. Overwrites, corrections and bulk commits are all stamped here — this is what makes a locked month evidence rather than a working document."
     />
   );

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { YearStrip } from '@/components/YearStrip';
 import { Card, Chip, ProgressBar, Screen, SectionLabel, StatCard } from '@/components/ui';
-import { TODAY_LABEL } from '@/lib/constants';
+import { todayLabel } from '@/lib/constants';
 import { signed } from '@/lib/score';
 import { STATUS_CHIP, type LeadHomeData } from '@/lib/team';
 
@@ -26,7 +26,7 @@ export function LeadHome({ data }: { data: LeadHomeData }) {
         meta={`${manager.department} · ${manager.location ?? '—'} · ${team.length} reporting`}
         aside={
           <span className="num" style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
-            {TODAY_LABEL}
+            {todayLabel()}
           </span>
         }
       />

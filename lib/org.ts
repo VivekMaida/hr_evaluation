@@ -1,4 +1,3 @@
-import { PILOT_TODAY } from './constants';
 import { prisma } from './db';
 
 /* ---------------------------------------------------------------------------
@@ -122,7 +121,7 @@ export async function getOrgCompleteness(fiscalYear: string): Promise<OrgComplet
   const daysLeftLabel = openCycle?.locksOn
     ? `locks in ${Math.max(
         0,
-        Math.ceil((openCycle.locksOn.getTime() - PILOT_TODAY.getTime()) / 86_400_000),
+        Math.ceil((openCycle.locksOn.getTime() - Date.now()) / 86_400_000),
       )} days`
     : null;
 
@@ -165,7 +164,7 @@ export async function getPendingExceptions(): Promise<PendingException[]> {
     detail: r.detail,
     daysWaiting: Math.max(
       0,
-      Math.round((PILOT_TODAY.getTime() - r.raisedAt.getTime()) / 86_400_000),
+      Math.round((Date.now() - r.raisedAt.getTime()) / 86_400_000),
     ),
   }));
 }

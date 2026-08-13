@@ -3,13 +3,11 @@ import { forbidden, redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { EmptyState } from '@/components/EmptyState';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { FY_LABEL } from '@/lib/constants';
+import { FISCAL_YEAR, FY_LABEL } from '@/lib/constants';
 import { prisma } from '@/lib/db';
 
 export const metadata = { title: 'No open cycle · M3M Perform' };
 export const dynamic = 'force-dynamic';
-
-const FISCAL_YEAR = '2025-26';
 
 /**
  * Reached when /performance-log finds no cycle marked OPEN for the fiscal

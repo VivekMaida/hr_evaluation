@@ -4,6 +4,7 @@ import { CoverageBar } from '@/components/CoverageBar';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { YearStrip } from '@/components/YearStrip';
 import { Card, Chip, SectionLabel } from '@/components/ui';
+import { FY_LABEL, FY_RANGE_LABEL } from '@/lib/constants';
 import type { ContextNote } from '@/lib/context-notes';
 import type { LockedMonthRow } from '@/lib/locked-months';
 import {
@@ -80,7 +81,7 @@ export function Scorecard({
     <>
       <ScreenHeader
         title="Scorecard"
-        meta="FY 2025–26 · April 2025 to March 2026"
+        meta={`${FY_LABEL} · ${FY_RANGE_LABEL}`}
         aside={
           <Link href="#" style={{ fontSize: 13.5, fontWeight: 700 }}>
             Export record
@@ -173,7 +174,7 @@ export function Scorecard({
               <YearStrip
                 size="large"
                 points={subject.points}
-                label={`${subject.name}, FY 2025–26`}
+                label={`${subject.name}, ${FY_LABEL}`}
               />
             </div>
           </div>

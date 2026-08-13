@@ -1,5 +1,6 @@
 import type { ReviewState } from '@prisma/client';
 import { getContextNotes, type ContextNote } from './context-notes';
+import { FISCAL_YEAR, FY_LABEL } from './constants';
 import { prisma } from './db';
 import { getEmployeeCycleScores, monthsLogged as countMonthsLogged, pointsFromCycleScores, yearAverage as computeYearAverage } from './employee-year';
 import type { MonthPoint } from './types';
@@ -8,8 +9,6 @@ import type { MonthPoint } from './types';
    Reviews — the annual rating. Ratings appear here and nowhere else; every
    other surface deals in weighted achievement percentages.
    --------------------------------------------------------------------------- */
-
-const FISCAL_YEAR = '2025-26';
 
 export type Band = {
   value: 1 | 2 | 3 | 4 | 5;
@@ -44,8 +43,8 @@ export const JUSTIFICATION_MIN_CHARS = 40;
  * placeholder, but no longer the source of anyone's actual record.
  */
 export const REVIEW_CONTEXT = {
-  cycle: 'Annual appraisal FY 2025–26',
-  closes: 'lead submissions close Friday, 24 April 2026',
+  cycle: `Annual appraisal ${FY_LABEL}`,
+  closes: 'lead submissions close Saturday, 24 April 2027',
   submitted: 2,
   total: 7,
   position: 'Employee 3 of 7',

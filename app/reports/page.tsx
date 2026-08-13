@@ -5,6 +5,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { ConsistencyScatter } from '@/components/reports/ConsistencyScatter';
 import { RatingSpreadBar } from '@/components/reports/RatingSpreadBar';
 import { Card, Chip, SectionLabel } from '@/components/ui';
+import { FY_LABEL, todayLabel } from '@/lib/constants';
 import {
   CONSISTENCY_RUN,
   LEAD_SPREADS,
@@ -50,7 +51,7 @@ export default async function ReportsPage() {
     <>
       <ScreenHeader
         title="Reports"
-        meta="FY 2025–26 · run against the record as it stands on 3 March 2026"
+        meta={`${FY_LABEL} · run against the record as it stands on ${todayLabel()}`}
         aside={
           <Link href="#" style={{ fontSize: 13.5, fontWeight: 700 }}>
             Export to Excel

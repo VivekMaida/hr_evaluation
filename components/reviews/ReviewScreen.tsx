@@ -3,6 +3,7 @@ import { CoverageBar } from '@/components/CoverageBar';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { YearStrip } from '@/components/YearStrip';
 import { Card, Chip, SectionLabel } from '@/components/ui';
+import { FY_LABEL, FY_RANGE_LABEL } from '@/lib/constants';
 import { BANDS, REVIEW_CONTEXT, impliedBand, type ReviewRecord, type ReviewSubject } from '@/lib/reviews';
 import { coverageBand, consistencyLabel, trendLabel } from '@/lib/scorecard';
 import { consistency, halves, signed, trend } from '@/lib/score';
@@ -35,7 +36,7 @@ export function ReviewScreen({
     <>
       <ScreenHeader
         title="Reviews"
-        meta={own ? 'Annual appraisal FY 2025–26' : `${REVIEW_CONTEXT.cycle} · ${REVIEW_CONTEXT.closes}`}
+        meta={own ? `Annual appraisal ${FY_LABEL}` : `${REVIEW_CONTEXT.cycle} · ${REVIEW_CONTEXT.closes}`}
         aside={
           own ? null : (
             <span className="num" style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
@@ -85,9 +86,9 @@ export function ReviewScreen({
           }}
         >
           <div className="stack" style={{ gap: 16 }}>
-            <SectionLabel>The year on record · April 2025 to March 2026</SectionLabel>
+            <SectionLabel>The year on record · {FY_RANGE_LABEL}</SectionLabel>
             <div style={{ paddingRight: 44 }}>
-              <YearStrip size="large" points={S.points} label={`${S.name}, FY 2025–26`} />
+              <YearStrip size="large" points={S.points} label={`${S.name}, ${FY_LABEL}`} />
             </div>
           </div>
           <div

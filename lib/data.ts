@@ -6,13 +6,15 @@ import { FY_MONTHS, type MonthKey, type MonthPoint } from './types';
    for real data access; nothing above it reaches into the shapes directly.
    --------------------------------------------------------------------------- */
 
-/** Today is 3 March 2026. February is the open cycle and locks Saturday 7 March. */
-export const TODAY_LABEL = 'Tuesday, 3 March 2026';
-export const FY_LABEL = 'FY 2025–26';
-export const OPEN_MONTH: MonthKey = 'Feb';
-export const OPEN_MONTH_LABEL = 'February 2026';
-export const LOCK_DATE_LABEL = 'Saturday, 7 March';
-export const DAYS_LEFT = 4;
+/**
+ * The upload page's own "which month, when does it lock" fixture facts —
+ * used nowhere else. `TODAY_LABEL`/`FY_LABEL` used to be duplicated here too;
+ * both are gone in favour of the single copies in lib/constants.ts, which
+ * nothing here ever needs since this module has no date math of its own.
+ */
+export const OPEN_MONTH: MonthKey = 'Aug';
+export const OPEN_MONTH_LABEL = 'August 2026';
+export const LOCK_DATE_LABEL = 'Monday, 7 September';
 
 export const CURRENT_USER = {
   lead: {

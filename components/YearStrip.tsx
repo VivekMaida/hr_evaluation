@@ -67,7 +67,7 @@ const STATUS_TEXT: Record<MonthPoint['status'], string> = {
 type Props = {
   points: MonthPoint[];
   size?: StripSize;
-  /** Names the strip for screen readers, e.g. "Kavita Nair, FY 2025–26". */
+  /** Names the strip for screen readers, e.g. "Kavita Nair, FY 2026–27". */
   label: string;
   /** Rings one month — e.g. the latest locked month on the employee's own Home. */
   highlightMonth?: MonthPoint['month'];

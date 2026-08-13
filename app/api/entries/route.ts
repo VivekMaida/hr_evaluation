@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '@/auth';
 import { canAccessEmployee } from '@/lib/access';
+import { FISCAL_YEAR } from '@/lib/constants';
 import { prisma } from '@/lib/db';
 import { blockers, buildRows, weightedScoreOf } from '@/lib/entries';
 import { getEmployeeCycleScores, pointsFromCycleScores } from '@/lib/employee-year';
@@ -9,8 +10,6 @@ import { getEmployeeCycleScores, pointsFromCycleScores } from '@/lib/employee-ye
 export const runtime = 'nodejs';
 // Always hit the database; a cached month is a wrong month.
 export const dynamic = 'force-dynamic';
-
-const FISCAL_YEAR = '2025-26';
 
 const readQuery = z.object({
   employeeId: z.string().min(1),

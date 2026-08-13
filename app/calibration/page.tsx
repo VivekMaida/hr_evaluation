@@ -1,6 +1,7 @@
 import { forbidden, redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { NotDrawnYet } from '@/components/NotDrawnYet';
+import { FY_LABEL } from '@/lib/constants';
 
 export const metadata = { title: 'Calibration · M3M Perform' };
 export const dynamic = 'force-dynamic';
@@ -13,7 +14,7 @@ export default async function CalibrationPage() {
   return (
     <NotDrawnYet
       title="Calibration"
-      meta="Annual appraisal FY 2025–26 · HR only"
+      meta={`Annual appraisal ${FY_LABEL} · HR only`}
       summary="Where HR reviews submitted ratings against the record — the gaps Reviews flags, the leads Report 02 surfaces, and the justifications written when a rating departs from the twelve months. No distribution is imposed here."
     />
   );

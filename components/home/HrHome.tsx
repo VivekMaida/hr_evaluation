@@ -1,6 +1,6 @@
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Card, Chip, SectionLabel } from '@/components/ui';
-import { TODAY_LABEL } from '@/lib/constants';
+import { todayLabel } from '@/lib/constants';
 import { completenessCell, type DepartmentCompleteness, type OrgCompleteness, type PendingException } from '@/lib/org';
 
 const MONTH_HEADS = [
@@ -145,7 +145,7 @@ export function HrHome({
         meta={`All departments · ${totals.employees.toLocaleString('en-IN')} employees · ${totals.leads} leads`}
         aside={
           <span className="num" style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
-            {TODAY_LABEL}
+            {todayLabel()}
           </span>
         }
       />

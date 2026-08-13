@@ -1,3 +1,5 @@
+import { FY_LABEL } from './constants';
+
 /* ---------------------------------------------------------------------------
    Spreadsheet upload route — CRM, February 2026, Farhan Ali.
    Same KRAs, same validation, same context-note rule as the form.
@@ -150,7 +152,7 @@ export const REJECTED_ROWS: RejectedRow[] = [
     valueRead: '3',
     reason: 'Unknown KPI',
     reasonTone: 'amber',
-    whatToDo: 'Row added by hand. Not in her FY 2025–26 KRA set — raise it in Admin first.',
+    whatToDo: `Row added by hand. Not in her ${FY_LABEL} KRA set — raise it in Admin first.`,
   },
   {
     row: 45,
