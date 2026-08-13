@@ -93,10 +93,12 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           select: { role: true, mustSetPassword: true },
         });
         if (!dbUser) {
-          // Account gone — strip claims so the next authorized check fails closed.
-          delete token.role;
-          delete token.mustSetPassword;
-          return token;
+          // Account gone (deleted employee, stale cookie) — returning null
+          // here is what @auth/core treats as "no session": the session()
+          // callback below is skipped, every `auth()` caller gets `null`
+          // instead of a half-populated user, and the session cookie is
+          // cleared wherever the response can carry a Set-Cookie header.
+          return null;
         }
         token.role = dbUser.role;
         token.mustSetPassword = dbUser.mustSetPassword;
