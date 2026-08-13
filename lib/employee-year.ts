@@ -1,4 +1,5 @@
 import type { CycleState } from '@prisma/client';
+import { PROGRAMME_START } from './constants';
 import { prisma } from './db';
 import { FY_MONTHS, type MonthPoint } from './types';
 
@@ -16,6 +17,38 @@ export type CycleScore = {
 export function priorFiscalYear(fiscalYear: string): string {
   const [start, end] = fiscalYear.split('-').map(Number);
   return `${start - 1}-${String((end - 1 + 100) % 100).padStart(2, '0')}`;
+}
+
+/** 1 = April of the fiscal year's start year, 12 = March of the next; a date on
+ *  or before that April 1 clamps to 1, a date beyond the following March 31 to 12. */
+function monthIndexOf(date: Date, fyStart: Date): number {
+  if (date <= fyStart) return 1;
+  const monthsSinceStart =
+    (date.getFullYear() - fyStart.getFullYear()) * 12 + (date.getMonth() - fyStart.getMonth());
+  return Math.min(12, Math.max(1, monthsSinceStart + 1));
+}
+
+/**
+ * The single "when did this person's record actually start" answer, used
+ * everywhere coverage is computed. Eligibility requires both the programme
+ * to have started (see `PROGRAMME_START` in lib/constants.ts) and the person
+ * to have joined — whichever of the two lands later in the fiscal year wins,
+ * since neither clause can make a month eligible on its own. A February
+ * joiner in a programme that started in August is eligible from February
+ * (11), not August (5): they joined after the programme was already
+ * running, so only their own join date is the binding constraint.
+ */
+export function eligibleFromMonthIndex(joinedOn: Date | null, fiscalYear: string): number {
+  const [startYear] = fiscalYear.split('-').map(Number);
+  const fyStart = new Date(startYear, 3, 1);
+  const programmeIndex = monthIndexOf(PROGRAMME_START, fyStart);
+  const joinedIndex = joinedOn ? monthIndexOf(joinedOn, fyStart) : 1;
+  return Math.max(programmeIndex, joinedIndex);
+}
+
+/** How many of the fiscal year's twelve months this person is actually eligible for. */
+export function eligibleMonthCount(fromIndex: number): number {
+  return 12 - fromIndex + 1;
 }
 
 /**
@@ -55,10 +88,19 @@ export async function getEmployeeCycleScores(
   });
 }
 
-/** Same "always all twelve slots" convention as lib/data.ts's buildYear, driven by real Cycle.state. */
-export function pointsFromCycleScores(scores: CycleScore[]): MonthPoint[] {
-  return scores.map((s) => {
-    const month = FY_MONTHS[s.monthIndex - 1];
+/**
+ * Always all twelve slots, regardless of how many Cycle rows actually exist
+ * for the fiscal year — a month before `fromIndex`, or one with no matching
+ * Cycle row at all, renders `not-applicable` rather than being dropped, so
+ * the year strip never silently shrinks.
+ */
+export function pointsFromCycleScores(scores: CycleScore[], fromIndex = 1): MonthPoint[] {
+  const byMonthIndex = new Map(scores.map((s) => [s.monthIndex, s]));
+  return FY_MONTHS.map((month, i) => {
+    const monthIndex = i + 1;
+    if (monthIndex < fromIndex) return { month, status: 'not-applicable' as const };
+    const s = byMonthIndex.get(monthIndex);
+    if (!s) return { month, status: 'not-applicable' as const };
     if (s.state === 'FUTURE') return { month, status: 'future' as const };
     if (s.weightedScore !== null) return { month, status: 'scored' as const, score: s.weightedScore };
     return { month, status: s.state === 'OPEN' ? ('open' as const) : ('not-logged' as const) };
@@ -77,8 +119,8 @@ export function maskOpenCycle(scores: CycleScore[]): CycleScore[] {
   return scores.map((s) => (s.state === 'OPEN' ? { ...s, weightedScore: null, submittedAt: null } : s));
 }
 
-export function monthsLogged(scores: CycleScore[]): number {
-  return scores.filter((s) => s.weightedScore !== null).length;
+export function monthsLogged(scores: CycleScore[], fromIndex = 1): number {
+  return scores.filter((s) => s.monthIndex >= fromIndex && s.weightedScore !== null).length;
 }
 
 export function yearAverage(scores: CycleScore[]): number | null {

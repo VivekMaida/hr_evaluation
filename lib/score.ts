@@ -84,17 +84,6 @@ export function weightedScore(kras: Kra[]): number | null {
   return weighted / weightBase;
 }
 
-/** Share of the year's twelve slots that carry a score. */
-export function coverage(points: MonthPoint[]): {
-  scored: number;
-  total: number;
-  percent: number;
-} {
-  const scored = points.filter((p) => p.status === 'scored').length;
-  const total = points.length;
-  return { scored, total, percent: total === 0 ? 0 : (scored / total) * 100 };
-}
-
 export function yearAverage(points: MonthPoint[]): number | null {
   const scores = points
     .filter((p) => p.status === 'scored' && typeof p.score === 'number')

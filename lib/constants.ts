@@ -28,6 +28,17 @@ export function todayLabel(): string {
 }
 
 /**
+ * The programme's own first eligible month — before this, nobody's record
+ * has anything in it, and never will, regardless of who joined when. Only
+ * ever binds for the fiscal year it falls in; every fiscal year after this
+ * one, it's earlier than that year's own April 1 and so never applies —
+ * eligibility from then on depends only on each employee's own `joinedOn`.
+ * See `eligibleFromMonthIndex()` in lib/employee-year.ts, the one place this
+ * and `joinedOn` are combined.
+ */
+export const PROGRAMME_START = new Date('2026-08-01T00:00:00+05:30');
+
+/**
  * Config flag, not employee data — gates Profile's "My record" section
  * (year strip, average, consistency, trend, coverage). Off for the pilot;
  * flip once that level of self-service is actually wanted.

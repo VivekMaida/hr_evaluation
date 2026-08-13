@@ -12,8 +12,8 @@ import { consistency, signed, trend } from '@/lib/score';
  * no other names anywhere on this screen.
  */
 export function EmployeeHome({ data }: { data: EmployeeHomeData }) {
-  const { employee, points, monthsLogged, yearAverage, latestLocked } = data;
-  const band = coverageBand(monthsLogged);
+  const { employee, points, monthsLogged, eligibleMonths, yearAverage, latestLocked } = data;
+  const band = coverageBand(monthsLogged, eligibleMonths);
   const suppressed = band === 'insufficient';
   const sd = consistency(points);
   const delta = trend(points);
@@ -109,7 +109,7 @@ export function EmployeeHome({ data }: { data: EmployeeHomeData }) {
             labelTone={suppressed ? 'red' : 'green'}
             tone={suppressed ? 'red' : 'green'}
             value={String(monthsLogged)}
-            suffix="of 12 months"
+            suffix={`of ${eligibleMonths} months`}
             foot={suppressed ? 'Insufficient' : 'Complete to date'}
           />
         </div>

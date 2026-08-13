@@ -55,6 +55,7 @@ const TRACK_CLASS: Record<MonthPoint['status'], string> = {
   'not-logged': styles.trackNotLogged,
   open: styles.trackOpen,
   future: styles.trackFuture,
+  'not-applicable': styles.trackNotApplicable,
 };
 
 const STATUS_TEXT: Record<MonthPoint['status'], string> = {
@@ -62,6 +63,7 @@ const STATUS_TEXT: Record<MonthPoint['status'], string> = {
   'not-logged': 'not logged',
   open: 'open',
   future: 'not yet reached',
+  'not-applicable': 'not applicable',
 };
 
 type Props = {

@@ -47,6 +47,13 @@
   overflow: visible;
 }
 
+/* Before this person's (or the programme's) own start — never had anything
+   to log, never will. Paler than .trackFuture and unbordered, so it never
+   reads as "not logged" (dashed) or "coming up" (flat pale grey). */
+.trackNotApplicable {
+  background: #fafafa;
+}
+
 /* The one month called out as "latest" — a ring, not a colour change, so the
    band colours keep meaning what they mean. */
 .trackHighlighted {

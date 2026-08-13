@@ -24,7 +24,7 @@ export function ReviewScreen({
   const h = halves(S.points);
   const delta = trend(S.points);
   const implied = impliedBand(S.yearAverage);
-  const band = coverageBand(S.monthsLogged);
+  const band = coverageBand(S.monthsLogged, S.eligibleMonths);
 
   const scores = S.points
     .filter((p) => p.status === 'scored' && typeof p.score === 'number')
@@ -172,7 +172,7 @@ export function ReviewScreen({
               <div className="num" style={{ fontSize: 36, fontWeight: 600, color: 'var(--navy)', lineHeight: 1.05 }}>
                 {S.monthsLogged}{' '}
                 <span style={{ fontSize: 20, fontWeight: 400, color: 'var(--grey-body)' }}>
-                  of 12 months
+                  of {S.eligibleMonths} months
                 </span>
               </div>
               <CoverageBar points={S.points} />

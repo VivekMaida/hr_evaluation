@@ -2,7 +2,14 @@ import type { ReviewState } from '@prisma/client';
 import { getContextNotes, type ContextNote } from './context-notes';
 import { FISCAL_YEAR, FY_LABEL } from './constants';
 import { prisma } from './db';
-import { getEmployeeCycleScores, monthsLogged as countMonthsLogged, pointsFromCycleScores, yearAverage as computeYearAverage } from './employee-year';
+import {
+  eligibleFromMonthIndex,
+  eligibleMonthCount,
+  getEmployeeCycleScores,
+  monthsLogged as countMonthsLogged,
+  pointsFromCycleScores,
+  yearAverage as computeYearAverage,
+} from './employee-year';
 import type { MonthPoint } from './types';
 
 /* ---------------------------------------------------------------------------
@@ -58,6 +65,8 @@ export type ReviewSubject = {
   identity: string;
   points: MonthPoint[];
   monthsLogged: number;
+  /** How many of the twelve months this person is actually eligible for — see eligibleFromMonthIndex(). */
+  eligibleMonths: number;
   yearAverage: number;
   contextNotes: ContextNote[];
   evidence: {
@@ -127,14 +136,21 @@ export async function getReviewData(employeeId: string): Promise<ReviewData | nu
 
   const base = { id: employee.id, name: employee.name, title: employee.title };
 
+  const fromIndex = eligibleFromMonthIndex(employee.joinedOn, FISCAL_YEAR);
+  const eligibleMonths = eligibleMonthCount(fromIndex);
+
   const scores = await getEmployeeCycleScores(employeeId, FISCAL_YEAR);
-  const months = countMonthsLogged(scores);
+  const months = countMonthsLogged(scores, fromIndex);
   if (months === 0) return { employee: base, subject: null, review };
 
-  const points = pointsFromCycleScores(scores);
+  const points = pointsFromCycleScores(scores, fromIndex);
   const average = computeYearAverage(scores) as number;
-  const above120 = scores.filter((s) => s.weightedScore !== null && s.weightedScore > 120).length;
-  const below70 = scores.filter((s) => s.weightedScore !== null && s.weightedScore < 70).length;
+  const above120 = scores.filter(
+    (s) => s.monthIndex >= fromIndex && s.weightedScore !== null && s.weightedScore > 120,
+  ).length;
+  const below70 = scores.filter(
+    (s) => s.monthIndex >= fromIndex && s.weightedScore !== null && s.weightedScore < 70,
+  ).length;
 
   const contextNotes = await getContextNotes(employeeId, FISCAL_YEAR);
 
@@ -144,10 +160,11 @@ export async function getReviewData(employeeId: string): Promise<ReviewData | nu
     identity: `${employee.title} · ${employee.id}`,
     points,
     monthsLogged: months,
+    eligibleMonths,
     yearAverage: average,
     contextNotes,
     evidence: {
-      monthsLogged: `${months} of 12`,
+      monthsLogged: `${months} of ${eligibleMonths}`,
       contextNotes: contextNotes.length,
       above120,
       below70,

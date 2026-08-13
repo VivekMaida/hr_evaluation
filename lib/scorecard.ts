@@ -1,6 +1,8 @@
 import { FISCAL_YEAR, FY_LABEL } from './constants';
 import { prisma } from './db';
 import {
+  eligibleFromMonthIndex,
+  eligibleMonthCount,
   getEmployeeCycleScores,
   maskOpenCycle,
   monthsLogged as countMonthsLogged,
@@ -19,30 +21,44 @@ import type { MonthPoint } from './types';
 /** Coverage decides what the record may be used for. */
 export type CoverageBand = 'complete' | 'partial' | 'insufficient';
 
+/**
+ * Proportional to eligible months, not an absolute count — a full year is
+ * 12 eligible months, but a mid-year joiner or a programme's own truncated
+ * first year might have as few as 1. The historical 11/12 and 8/12 splits
+ * are preserved as fractions, so a full 12-month year reads exactly as it
+ * always did; the same ratio, applied to a shorter window, is what makes a
+ * perfect record on a shorter window reach "complete" instead of being
+ * permanently capped at "partial".
+ */
 export const COVERAGE_BANDS: {
   band: CoverageBand;
   range: string;
   label: string;
   tone: 'green' | 'navy' | 'red';
 }[] = [
-  { band: 'complete', range: '11–12', label: 'complete', tone: 'green' },
+  { band: 'complete', range: '92% or more of eligible months', label: 'complete', tone: 'green' },
   {
     band: 'partial',
-    range: '8–10',
+    range: '67–91% of eligible months',
     label: 'partial — rateable, flagged in Calibration',
     tone: 'navy',
   },
   {
     band: 'insufficient',
-    range: '7 or fewer',
+    range: 'under 67% of eligible months',
     label: 'insufficient — derived metrics suppressed, rating blocked',
     tone: 'red',
   },
 ];
 
-export function coverageBand(months: number): CoverageBand {
-  if (months >= 11) return 'complete';
-  if (months >= 8) return 'partial';
+/** Months needed to clear "insufficient" and count as at least partial. */
+export function partialThresholdMonths(eligibleMonths: number): number {
+  return Math.ceil((eligibleMonths * 2) / 3);
+}
+
+export function coverageBand(monthsLogged: number, eligibleMonths: number): CoverageBand {
+  if (monthsLogged >= Math.ceil((eligibleMonths * 11) / 12)) return 'complete';
+  if (monthsLogged >= partialThresholdMonths(eligibleMonths)) return 'partial';
   return 'insufficient';
 }
 
@@ -88,6 +104,8 @@ export type ScorecardSubject = {
   identity: string;
   points: MonthPoint[];
   monthsLogged: number;
+  /** How many of the twelve months this person is actually eligible for — see eligibleFromMonthIndex(). */
+  eligibleMonths: number;
   /** Present only when the record is deep enough to publish a matrix. */
   matrix?: KraMonthRow[];
   weightedByMonth?: (number | null)[];
@@ -142,10 +160,13 @@ export async function getScorecardData(
   ]);
   const scores = options.maskOpenCycleData ? maskOpenCycle(rawScores) : rawScores;
 
-  const months = countMonthsLogged(scores);
+  const fromIndex = eligibleFromMonthIndex(employee.joinedOn, FISCAL_YEAR);
+  const eligibleMonths = eligibleMonthCount(fromIndex);
+
+  const months = countMonthsLogged(scores, fromIndex);
   if (months === 0) return { employee: base, subject: null };
 
-  const points = pointsFromCycleScores(scores);
+  const points = pointsFromCycleScores(scores, fromIndex);
   const average = computeYearAverage(scores) as number;
 
   const identityParts = [
@@ -162,12 +183,13 @@ export async function getScorecardData(
     identity: identityParts.join(' · '),
     points,
     monthsLogged: months,
+    eligibleMonths,
     yearAverage: average,
   };
 
-  if (coverageBand(months) === 'insufficient') {
+  if (coverageBand(months, eligibleMonths) === 'insufficient') {
     const missing = scores
-      .filter((s) => s.state !== 'FUTURE' && s.weightedScore === null)
+      .filter((s) => s.monthIndex >= fromIndex && s.state !== 'FUTURE' && s.weightedScore === null)
       .map((s) => s.label.split(' ')[0]);
     subject.missingMonths = missing.length > 0 ? missing.join(' · ') : '—';
     subject.missingNote =
@@ -175,7 +197,7 @@ export async function getScorecardData(
     return { employee: base, subject };
   }
 
-  const lockedScores = scores.filter((s) => s.state === 'LOCKED');
+  const lockedScores = scores.filter((s) => s.monthIndex >= fromIndex && s.state === 'LOCKED');
   const monthsLocked = lockedScores.filter((s) => s.weightedScore !== null).length;
 
   const entries = await prisma.monthlyEntry.findMany({

@@ -2,7 +2,7 @@ import type { Role } from '@prisma/client';
 import { getAcknowledgements, type AcknowledgementItem } from './acknowledgements';
 import { FISCAL_YEAR, FY_LABEL, SHOW_PROFILE_RECORD } from './constants';
 import { prisma } from './db';
-import { getEmployeeCycleScores } from './employee-year';
+import { eligibleFromMonthIndex, getEmployeeCycleScores } from './employee-year';
 import { getScorecardData } from './scorecard';
 import type { ScorecardSubject } from './scorecard';
 
@@ -65,17 +65,6 @@ export type ProfileData = {
 /** First name only, for a one-line explanatory sentence — not a display field. */
 function firstName(name: string): string {
   return name.split(' ')[0] ?? name;
-}
-
-/** 1 = April of the fiscal year's start year, 12 = March of the next. */
-function eligibleFromMonthIndex(joinedOn: Date | null, fiscalYear: string): number {
-  if (!joinedOn) return 1;
-  const [startYear] = fiscalYear.split('-').map(Number);
-  const fyStart = new Date(startYear, 3, 1);
-  if (joinedOn <= fyStart) return 1;
-  const monthsSinceStart =
-    (joinedOn.getFullYear() - fyStart.getFullYear()) * 12 + (joinedOn.getMonth() - fyStart.getMonth());
-  return Math.min(12, Math.max(1, monthsSinceStart + 1));
 }
 
 /** Returns null only when the employee (or their account) doesn't exist. */

@@ -290,7 +290,7 @@ export function ProfileScreen({
 function MyRecordBody({ subject }: { subject: import('@/lib/scorecard').ScorecardSubject }) {
   const sd = consistency(subject.points);
   const delta = trend(subject.points);
-  const band = coverageBand(subject.monthsLogged);
+  const band = coverageBand(subject.monthsLogged, subject.eligibleMonths);
 
   return (
     <>
@@ -339,7 +339,8 @@ function MyRecordBody({ subject }: { subject: import('@/lib/scorecard').Scorecar
           <div className="stack" style={{ gap: 5 }}>
             <SectionLabel tone={band === 'insufficient' ? 'red' : 'navy'}>Coverage</SectionLabel>
             <div className="num" style={{ fontSize: 22, fontWeight: 600, color: 'var(--navy)' }}>
-              {subject.monthsLogged} <span style={{ fontSize: 14, fontWeight: 400 }}>of 12</span>
+              {subject.monthsLogged}{' '}
+              <span style={{ fontSize: 14, fontWeight: 400 }}>of {subject.eligibleMonths}</span>
             </div>
             <CoverageBar points={subject.points} />
           </div>

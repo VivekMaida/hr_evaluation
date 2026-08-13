@@ -1,6 +1,14 @@
 import { getAcknowledgedCycleIds } from './acknowledgements';
 import { prisma } from './db';
-import { getEmployeeCycleScores, maskOpenCycle, monthsLogged, yearAverage as computeYearAverage, pointsFromCycleScores } from './employee-year';
+import {
+  eligibleFromMonthIndex,
+  eligibleMonthCount,
+  getEmployeeCycleScores,
+  maskOpenCycle,
+  monthsLogged,
+  yearAverage as computeYearAverage,
+  pointsFromCycleScores,
+} from './employee-year';
 import { FY_MONTHS, type MonthKey, type MonthPoint } from './types';
 
 /* ---------------------------------------------------------------------------
@@ -13,6 +21,8 @@ export type EmployeeHomeData = {
   employee: { id: string; name: string };
   points: MonthPoint[];
   monthsLogged: number;
+  /** How many of the twelve months this person is actually eligible for — see eligibleFromMonthIndex(). */
+  eligibleMonths: number;
   yearAverage: number | null;
   /** The most recently locked month, for the year-strip ring and the notification. */
   latestLocked: {
@@ -34,15 +44,18 @@ export async function getEmployeeHomeData(
 ): Promise<EmployeeHomeData | null> {
   const employee = await prisma.employee.findUnique({
     where: { id: employeeId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, joinedOn: true },
   });
   if (!employee) return null;
 
+  const fromIndex = eligibleFromMonthIndex(employee.joinedOn, fiscalYear);
+  const eligibleMonths = eligibleMonthCount(fromIndex);
+
   const rawScores = await getEmployeeCycleScores(employeeId, fiscalYear);
   const scores = options.maskOpenCycleData ? maskOpenCycle(rawScores) : rawScores;
-  const points = pointsFromCycleScores(scores);
+  const points = pointsFromCycleScores(scores, fromIndex);
 
-  const lockedScores = scores.filter((s) => s.state === 'LOCKED');
+  const lockedScores = scores.filter((s) => s.monthIndex >= fromIndex && s.state === 'LOCKED');
   const latestLockedScore =
     lockedScores.length === 0
       ? null
@@ -62,7 +75,8 @@ export async function getEmployeeHomeData(
   return {
     employee,
     points,
-    monthsLogged: monthsLogged(scores),
+    monthsLogged: monthsLogged(scores, fromIndex),
+    eligibleMonths,
     yearAverage: computeYearAverage(scores),
     latestLocked,
   };

@@ -12,6 +12,7 @@ import {
   consistencyLabel,
   coverageBand,
   matrixCellColour,
+  partialThresholdMonths,
   trendLabel,
   type ScorecardSubject,
 } from '@/lib/scorecard';
@@ -71,7 +72,7 @@ export function Scorecard({
   /** Viewing this person's own manager's record — shows "respond" on open queries. */
   isManager?: boolean;
 }) {
-  const band = coverageBand(subject.monthsLogged);
+  const band = coverageBand(subject.monthsLogged, subject.eligibleMonths);
   const suppressed = band === 'insufficient';
   const sd = consistency(subject.points);
   const delta = trend(subject.points);
@@ -110,13 +111,15 @@ export function Scorecard({
           >
             <div className="stack" style={{ flex: 1, minWidth: 0, gap: 5 }}>
               <div style={{ fontSize: 19, fontWeight: 700, color: 'var(--red)' }}>
-                This record covers {subject.monthsLogged} of 12 months
+                This record covers {subject.monthsLogged} of {subject.eligibleMonths} months
               </div>
               <div style={{ fontSize: 14.5, lineHeight: 1.55, color: 'var(--grey-body)' }}>
-                Six elapsed months were never logged. The average below is calculated on
-                what exists, not on the year — it is not a basis for an annual rating, and
-                Reviews will refuse the submission until coverage reaches eight months or
-                HR approves an exception.
+                {subject.eligibleMonths - subject.monthsLogged} eligible month
+                {subject.eligibleMonths - subject.monthsLogged === 1 ? '' : 's'} were never
+                logged. The average below is calculated on what exists, not on the year — it
+                is not a basis for an annual rating, and Reviews will refuse the submission
+                until coverage reaches {partialThresholdMonths(subject.eligibleMonths)} months
+                or HR approves an exception.
               </div>
             </div>
             <button
@@ -344,14 +347,14 @@ export function Scorecard({
               >
                 {subject.monthsLogged}{' '}
                 <span style={{ fontSize: 20, fontWeight: 400, color: 'var(--grey-body)' }}>
-                  of 12 months
+                  of {subject.eligibleMonths} months
                 </span>
               </div>
               <CoverageBar points={subject.points} />
               <div style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
                 {suppressed
                   ? 'Filled navy is logged, dashed red is a month that closed empty.'
-                  : 'Every elapsed month is logged. February is open until 7 March.'}
+                  : 'Every eligible month is logged.'}
               </div>
             </div>
           </Card>

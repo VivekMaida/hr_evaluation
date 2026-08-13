@@ -12,6 +12,8 @@ function segmentStyle(point: MonthPoint): CSSProperties {
       return { background: 'var(--grey-surface)' };
     case 'future':
       return { background: '#f2f2f2' };
+    case 'not-applicable':
+      return { background: '#fafafa' };
   }
 }
 

@@ -20,12 +20,16 @@ export type MonthKey = (typeof FY_MONTHS)[number];
  * The track is always drawn. A missing month must read as a hole in the year,
  * never as a zero and never as absent.
  *
- * - `scored`     — cycle closed, a weighted score exists
- * - `not-logged` — cycle closed, nothing entered
- * - `open`       — this month, still being logged
- * - `future`     — not yet reached
+ * - `scored`         — cycle closed, a weighted score exists
+ * - `not-logged`     — cycle closed, nothing entered
+ * - `open`           — this month, still being logged
+ * - `future`         — not yet reached
+ * - `not-applicable` — before this person's (or the programme's) own start;
+ *                      there was never anything to log here and never will
+ *                      be — visually distinct from `not-logged`, which means
+ *                      a month that should have been logged and wasn't
  */
-export type MonthStatus = 'scored' | 'not-logged' | 'open' | 'future';
+export type MonthStatus = 'scored' | 'not-logged' | 'open' | 'future' | 'not-applicable';
 
 export type MonthPoint = {
   month: MonthKey;
