@@ -1,5 +1,12 @@
 /**
- * Seeds the pilot. Idempotent — safe to re-run.
+ * Seeds the fixture/demo scenario for local development. Idempotent — safe
+ * to re-run. For the real pilot team, KPIs and FY 2026-27 cycles, see
+ * prisma/seed-pilot.ts instead — never this file.
+ *
+ * Refuses to run if it finds a Cycle row for FISCAL_YEAR it didn't write
+ * itself (see refuseIfForeignCyclesExist below) — this and seed-pilot.ts
+ * share that constant, and this has overwritten real pilot cycles once
+ * already when run against the same database.
  *
  * Users get the shared pilot default password and mustSetPassword = true.
  * Re-running seed resets those fields so the handoff credentials stay known.
@@ -8,9 +15,9 @@
  * The shared default is pilot-only (in-person handoff). v1 must use per-user
  * temporary passwords at account creation — see lib/pilot-auth.ts.
  *
- * The KPI set below is still the prototype's Sales fixture. Replace
- * `KPI_TEMPLATE` (and the roster, if it differs) with the real sheet from HR
- * before the pilot starts — see README, "Loading the real KPI master".
+ * The KPI set below is still the prototype's Sales fixture — that's
+ * intentional, it's a fixture. The real sheet goes through prisma/kpis.csv
+ * and prisma/seed-pilot.ts, not this file.
  */
 import bcrypt from 'bcryptjs';
 import { PrismaClient, type CycleState, type Role } from '@prisma/client';
@@ -57,7 +64,45 @@ function emailFor(name: string): string {
   return `${name.toLowerCase().replace(/[^a-z ]/g, '').split(/\s+/).join('.')}@m3mindia.com`;
 }
 
+/**
+ * This fixture and prisma/seed-pilot.ts's real cycles share FISCAL_YEAR —
+ * they key off the same [fiscalYear, monthIndex] row, so upserting here can
+ * silently overwrite real Cycle rows (and orphan real Submissions against
+ * them) if this is ever run against the pilot's actual database. It has
+ * happened once already. Every Cycle row this fixture itself creates always
+ * carries exactly `MONTHS[i]` and `stateFor(monthIndex)` — a re-run of this
+ * same fixture only ever finds rows matching that. Anything under this
+ * fiscal year that doesn't match wasn't written by this script, and this
+ * refuses to run rather than guess whether it's safe to overwrite.
+ */
+async function refuseIfForeignCyclesExist(): Promise<void> {
+  const existing = await prisma.cycle.findMany({ where: { fiscalYear: FISCAL_YEAR } });
+  const foreign = existing.filter(
+    (c) => c.label !== MONTHS[c.monthIndex - 1] || c.state !== stateFor(c.monthIndex),
+  );
+  if (foreign.length === 0) return;
+
+  const details = foreign
+    .map(
+      (c) =>
+        `  - monthIndex ${c.monthIndex}: label="${c.label}", state=${c.state}` +
+        ` (this fixture would set label="${MONTHS[c.monthIndex - 1]}", state=${stateFor(c.monthIndex)})`,
+    )
+    .join('\n');
+  throw new Error(
+    `Refusing to seed — ${foreign.length} Cycle row(s) for fiscalYear ${FISCAL_YEAR} don't match ` +
+      `what this fixture would set, meaning something else created or changed them (most likely ` +
+      `prisma/seed-pilot.ts's real cycles):\n${details}\n\n` +
+      `This fixture is for local development only. If this is genuinely a fixture-only database and ` +
+      `these rows are just stale, delete the fiscalYear ${FISCAL_YEAR} Cycle rows (and anything ` +
+      `referencing them) and re-run. If this is the real pilot's database, do not run this script ` +
+      `against it at all.`,
+  );
+}
+
 async function main() {
+  await refuseIfForeignCyclesExist();
+
   const totalWeight = KPI_TEMPLATE.reduce((sum, k) => sum + k.weight, 0);
   if (totalWeight !== 100) {
     throw new Error(`KPI weights must sum to 100, got ${totalWeight}`);

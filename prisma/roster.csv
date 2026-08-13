@@ -1,0 +1,2 @@
+employeeId,name,email,title,department,location,joinedOn,leadId,role
+EXAMPLE-0001,Replace This Row,replace.this.row@example.com,Designation,Department name,City,2020-01-15,,MANAGER

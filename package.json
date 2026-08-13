@@ -13,6 +13,7 @@
     "db:migrate": "dotenv -e .env.local -- prisma migrate dev",
     "db:deploy": "dotenv -e .env.local -- prisma migrate deploy",
     "db:seed": "dotenv -e .env.local -- tsx prisma/seed.ts",
+    "db:seed:pilot": "dotenv -e .env.local -- tsx prisma/seed-pilot.ts",
     "db:studio": "dotenv -e .env.local -- prisma studio",
     "postinstall": "prisma generate"
   },

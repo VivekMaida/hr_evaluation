@@ -128,6 +128,19 @@ model Cycle {
   @@index([state])
 }
 
+/// How a KPI's actual is judged. `lowerIsBetter` is what the achievement maths
+/// actually branches on; `type` is the richer classification captured at
+/// seed time (from the roster/KPI sheet) and kept in sync with it — milestone
+/// and qualitative KPIs behave like HIGHER_IS_BETTER today (actual ÷ target),
+/// since neither the entry form nor the achievement maths has a distinct
+/// input mode for them yet.
+enum KpiType {
+  HIGHER_IS_BETTER
+  LOWER_IS_BETTER
+  MILESTONE
+  QUALITATIVE
+}
+
 /// One key result area for one employee for one financial year. Weights across
 /// an employee's KPIs sum to 100.
 model Kpi {
@@ -144,7 +157,9 @@ model Kpi {
   weight Decimal @db.Decimal(5, 2)
   target Decimal @db.Decimal(14, 2)
 
+  type KpiType @default(HIGHER_IS_BETTER)
   /// TAT and escalation KPIs invert the achievement maths: target / actual.
+  /// Derived from `type` at write time — `type === LOWER_IS_BETTER`.
   lowerIsBetter Boolean @default(false)
   sortOrder     Int     @default(0)
 

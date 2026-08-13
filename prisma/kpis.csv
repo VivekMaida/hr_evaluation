@@ -1,0 +1,2 @@
+employeeId,name,basis,unit,weight,target,type,sortOrder
+EXAMPLE-0001,Replace this KRA,Description shown under the KRA name on the entry form,%,100,100,higher-is-better,1
