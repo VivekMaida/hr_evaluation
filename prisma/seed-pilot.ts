@@ -25,6 +25,7 @@
  * against here.
  */
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';
 import { PrismaClient, type KpiType, type Role } from '@prisma/client';
@@ -301,9 +302,21 @@ async function main() {
     const sortOrder = k.sortOrder ? Number(k.sortOrder) : nextAuto;
     sortCounters.set(k.employeeId, nextAuto + 1);
 
+    // effectiveFrom: 1 — this seed only ever runs pre-season, before any
+    // cycle opens, so it always targets the one original version of a KPI.
+    // A re-run after edits have created later versions would collide with
+    // this key rather than silently overwriting a live/pending row.
+    // A fresh KRA's lineageId is its own id — the identity later versions
+    // carry forward when this one gets edited.
+    const newId = randomUUID();
     await prisma.kpi.upsert({
       where: {
-        employeeId_fiscalYear_name: { employeeId: k.employeeId, fiscalYear: FISCAL_YEAR, name: k.name },
+        employeeId_fiscalYear_name_effectiveFrom: {
+          employeeId: k.employeeId,
+          fiscalYear: FISCAL_YEAR,
+          name: k.name,
+          effectiveFrom: 1,
+        },
       },
       update: {
         basis: k.basis,
@@ -315,9 +328,12 @@ async function main() {
         sortOrder,
       },
       create: {
+        id: newId,
+        lineageId: newId,
         employeeId: k.employeeId,
         fiscalYear: FISCAL_YEAR,
         name: k.name,
+        effectiveFrom: 1,
         basis: k.basis,
         unit: k.unit || null,
         weight: Number(k.weight),

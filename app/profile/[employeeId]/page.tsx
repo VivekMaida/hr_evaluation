@@ -9,10 +9,12 @@ export const metadata = { title: 'Profile · M3M Perform' };
 export const dynamic = 'force-dynamic';
 
 /**
- * HR viewing (and editing the master data of) someone else's profile.
- * Self-edit is refused — redirected to the read-only /profile instead —
- * because letting HR use this door on their own record is the same
- * audit-trail hole as letting anyone edit their own reporting manager.
+ * Someone else's profile. Identity edits (EditIdentityForm) stay HR-only —
+ * self-edit refused, since letting HR use this door on their own record is
+ * the same audit-trail hole as letting anyone edit their own reporting
+ * manager. KPI edits open up further: HR for anyone, or the employee's own
+ * manager for their direct report — canAccessEmployee already encodes both
+ * rules, including refusing a manager's own record (not a "direct report").
  */
 export default async function ProfileForEmployeePage({
   params,
@@ -23,22 +25,34 @@ export default async function ProfileForEmployeePage({
 
   const session = await auth();
   if (!session?.user) redirect('/login');
-  if (session.user.role !== 'HR') forbidden();
   if (employeeId === session.user.employeeId) redirect('/profile');
 
-  if (!(await canAccessEmployee(session.user, employeeId, true))) forbidden();
+  const canEditKpis = await canAccessEmployee(session.user, employeeId, true);
+  const canEditIdentity = session.user.role === 'HR';
+  if (!canEditIdentity && !canEditKpis) forbidden();
 
   const data = await getProfileData(employeeId);
   if (!data) notFound();
 
-  const [departments, managers] = await Promise.all([
-    prisma.department.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
-    prisma.employee.findMany({
-      where: { id: { not: employeeId }, user: { role: 'MANAGER' } },
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true },
-    }),
-  ]);
+  const [departments, managers] = canEditIdentity
+    ? await Promise.all([
+        prisma.department.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+        prisma.employee.findMany({
+          where: { id: { not: employeeId }, user: { role: 'MANAGER' } },
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true },
+        }),
+      ])
+    : [undefined, undefined];
 
-  return <ProfileScreen data={data} own={false} editable departments={departments} managers={managers} />;
+  return (
+    <ProfileScreen
+      data={data}
+      own={false}
+      editable={canEditIdentity}
+      canEditKpis={canEditKpis}
+      departments={departments}
+      managers={managers}
+    />
+  );
 }

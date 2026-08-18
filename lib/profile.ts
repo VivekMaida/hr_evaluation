@@ -1,8 +1,9 @@
-import type { Role } from '@prisma/client';
+import type { KpiType, Role } from '@prisma/client';
 import { getAcknowledgements, type AcknowledgementItem } from './acknowledgements';
 import { FISCAL_YEAR, FY_LABEL, SHOW_PROFILE_RECORD } from './constants';
 import { prisma } from './db';
 import { eligibleFromMonthIndex, getEmployeeCycleScores } from './employee-year';
+import { getCurrentAndPendingKpiSets, getRecentKpiChanges, type KpiChangeItem, type KpiRow } from './kpi';
 import { getScorecardData } from './scorecard';
 import type { ScorecardSubject } from './scorecard';
 
@@ -40,16 +41,39 @@ export type KpiSetItem = {
   id: string;
   name: string;
   basis: string;
+  unit: string | null;
   weight: number;
   target: number;
+  type: KpiType;
   lowerIsBetter: boolean;
+  sortOrder: number;
 };
 
 export type KpiSet = {
-  items: KpiSetItem[];
+  /** What's actually in force right now. Empty pre-season, before anything's published. */
+  current: KpiSetItem[];
+  /** A saved edit not yet in force — empty unless one is scheduled. */
+  pending: KpiSetItem[];
+  /** Set only when `pending` is non-empty. */
+  pendingFromLabel: string | null;
   fiscalYearLabel: string;
   effectiveDateLabel: string | null;
+  recentChanges: KpiChangeItem[];
 };
+
+function toKpiSetItem(k: KpiRow): KpiSetItem {
+  return {
+    id: k.id,
+    name: k.name,
+    basis: k.basis,
+    unit: k.unit,
+    weight: k.weight,
+    target: k.target,
+    type: k.type,
+    lowerIsBetter: k.lowerIsBetter,
+    sortOrder: k.sortOrder,
+  };
+}
 
 export type ProfileData = {
   identity: ProfileIdentity;
@@ -86,10 +110,11 @@ export async function getProfileData(employeeId: string): Promise<ProfileData | 
     ? await prisma.employee.findUnique({ where: { id: employee.leadId }, select: { name: true } })
     : null;
 
-  const [scores, kpiRows, acknowledgements] = await Promise.all([
+  const [scores, kpiSets, acknowledgements, recentChanges] = await Promise.all([
     getEmployeeCycleScores(employeeId, FISCAL_YEAR),
-    prisma.kpi.findMany({ where: { employeeId, fiscalYear: FISCAL_YEAR }, orderBy: { sortOrder: 'asc' } }),
+    getCurrentAndPendingKpiSets(employeeId, FISCAL_YEAR),
     getAcknowledgements(employeeId),
+    getRecentKpiChanges(employeeId),
   ]);
 
   const fromIndex = eligibleFromMonthIndex(employee.joinedOn, FISCAL_YEAR);
@@ -108,22 +133,17 @@ export async function getProfileData(employeeId: string): Promise<ProfileData | 
         : null,
   };
 
-  const effectiveDate = kpiRows.length
-    ? new Date(Math.min(...kpiRows.map((k) => k.createdAt.getTime())))
+  const { current, pending, pendingFromCycle, cycles } = kpiSets;
+  const effectiveSinceCycle = current.length
+    ? cycles.find((c) => c.monthIndex === Math.min(...current.map((k) => k.effectiveFrom)))
     : null;
   const kpis: KpiSet = {
-    items: kpiRows.map((k) => ({
-      id: k.id,
-      name: k.name,
-      basis: k.basis,
-      weight: Number(k.weight),
-      target: Number(k.target),
-      lowerIsBetter: k.lowerIsBetter,
-    })),
+    current: current.map(toKpiSetItem),
+    pending: pending.map(toKpiSetItem),
+    pendingFromLabel: pendingFromCycle?.label ?? null,
     fiscalYearLabel: FY_LABEL,
-    effectiveDateLabel: effectiveDate
-      ? effectiveDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
-      : null,
+    effectiveDateLabel: effectiveSinceCycle?.label ?? null,
+    recentChanges,
   };
 
   let record: ProfileData['record'] = null;

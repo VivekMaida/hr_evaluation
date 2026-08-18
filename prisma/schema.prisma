@@ -142,11 +142,26 @@ enum KpiType {
 }
 
 /// One key result area for one employee for one financial year. Weights across
-/// an employee's KPIs sum to 100.
+/// an employee's *currently active* KPIs sum to 100.
+///
+/// Effective-dated: editing a KPI never mutates a row a month has already been
+/// scored against. Instead the old row is closed out (`effectiveTo` set) and a
+/// new row picks up from the next editable month (`effectiveFrom`). A row with
+/// `effectiveTo: null` is either the live set (`effectiveFrom` at or before the
+/// current cycle) or a pending edit not yet in force (`effectiveFrom` in the
+/// future) — see lib/kpi.ts, the one place that draws that line.
 model Kpi {
   id         String   @id @default(cuid())
   employeeId String
   employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  /// Stable across versions of the same KRA — the first version's own `id`,
+  /// carried forward unchanged every time an edit closes one row and opens
+  /// the next. What lets the Scorecard matrix find a locked month's entry
+  /// (recorded against whichever version was live that month) even after the
+  /// KRA has since been renamed or reweighted. A brand new KRA's first
+  /// version sets this to its own `id`.
+  lineageId String
 
   fiscalYear String
   name       String
@@ -163,13 +178,20 @@ model Kpi {
   lowerIsBetter Boolean @default(false)
   sortOrder     Int     @default(0)
 
+  /// 1–12, the fiscalYear month this version starts applying from.
+  effectiveFrom Int @default(1)
+  /// 1–12, the last month this version applies to. Null = still active.
+  effectiveTo   Int?
+
   entries MonthlyEntry[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([employeeId, fiscalYear, name])
+  @@unique([employeeId, fiscalYear, name, effectiveFrom])
   @@index([employeeId, fiscalYear])
+  @@index([employeeId, fiscalYear, effectiveTo])
+  @@index([employeeId, fiscalYear, lineageId])
 }
 
 /// One actual, for one KPI, in one cycle. This is the row a lead types into.

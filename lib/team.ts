@@ -2,6 +2,7 @@ import { now } from './constants';
 import { prisma } from './db';
 import { blockers, buildRows, weightedScoreOf } from './entries';
 import { getEmployeeCycleScoresBatch, pointsFromCycleScores } from './employee-year';
+import { getKpiSetForCycleBatch, weightTotal } from './kpi';
 import type { MonthPoint } from './types';
 
 /* ---------------------------------------------------------------------------
@@ -34,6 +35,8 @@ export type TeamMemberRow = {
   score: number | null;
   /** Apr → Mar, from real Submission rows. */
   points: MonthPoint[];
+  /** Sum of the currently active KPI set's weights — should read 100. */
+  kpiWeightTotal: number;
 };
 
 export type ManagerTeam = {
@@ -54,30 +57,27 @@ export async function getManagerTeam(managerId: string, fiscalYear: string): Pro
   // One Cycle query and one Submission query for the whole team, not one
   // pair per report — see getEmployeeCycleScoresBatch's own comment for why
   // that matters here specifically.
-  const [{ scoresByEmployee, cycles }, kpis] = await Promise.all([
-    getEmployeeCycleScoresBatch(reportIds, fiscalYear),
-    prisma.kpi.findMany({
-      where: { employeeId: { in: reportIds }, fiscalYear },
-      orderBy: { sortOrder: 'asc' },
-    }),
-  ]);
+  const { scoresByEmployee, cycles } = await getEmployeeCycleScoresBatch(reportIds, fiscalYear);
 
   if (reports.length === 0) return { team: [], cycles };
 
   // Every report's score list carries every cycle for the year — read the
   // open one off the shared cycle list rather than running a separate query.
-  const openCycleId = cycles.find((c) => c.state === 'OPEN')?.id ?? null;
+  const openCycleRow = cycles.find((c) => c.state === 'OPEN') ?? null;
 
-  const entries = openCycleId
-    ? await prisma.monthlyEntry.findMany({
-        where: { employeeId: { in: reportIds }, cycleId: openCycleId },
-      })
-    : [];
+  // KPIs as of the open cycle specifically, not "whichever rows exist for
+  // this fiscalYear" — with effective-dated versions that would double-count
+  // an edited KRA's old and new rows. Falls back to month 12 when nothing is
+  // open (nothing entered yet either, so the exact KPI set barely matters).
+  const [entries, kpisByEmployee] = await Promise.all([
+    openCycleRow
+      ? prisma.monthlyEntry.findMany({
+          where: { employeeId: { in: reportIds }, cycleId: openCycleRow.id },
+        })
+      : Promise.resolve([]),
+    getKpiSetForCycleBatch(reportIds, fiscalYear, openCycleRow?.monthIndex ?? 12),
+  ]);
 
-  const kpisByEmployee = new Map<string, typeof kpis>();
-  for (const kpi of kpis) {
-    kpisByEmployee.set(kpi.employeeId, [...(kpisByEmployee.get(kpi.employeeId) ?? []), kpi]);
-  }
   const entriesByEmployee = new Map<string, typeof entries>();
   for (const entry of entries) {
     entriesByEmployee.set(entry.employeeId, [
@@ -90,6 +90,8 @@ export async function getManagerTeam(managerId: string, fiscalYear: string): Pro
     const scores = scoresByEmployee.get(report.id) ?? [];
     const points = pointsFromCycleScores(scores);
     const openScore = scores.find((s) => s.state === 'OPEN');
+    const kpis = kpisByEmployee.get(report.id) ?? [];
+    const kpiWeightTotal = weightTotal(kpis);
 
     if (openScore && openScore.weightedScore !== null) {
       return {
@@ -99,13 +101,22 @@ export async function getManagerTeam(managerId: string, fiscalYear: string): Pro
         status: 'submitted' as const,
         score: openScore.weightedScore,
         points,
+        kpiWeightTotal,
       };
     }
 
-    const rows = buildRows(kpisByEmployee.get(report.id) ?? [], entriesByEmployee.get(report.id) ?? []);
+    const rows = buildRows(kpis, entriesByEmployee.get(report.id) ?? []);
     const someEntered = rows.some((r) => r.achievement !== null);
     if (!someEntered) {
-      return { id: report.id, name: report.name, title: report.title, status: 'not-started' as const, score: null, points };
+      return {
+        id: report.id,
+        name: report.name,
+        title: report.title,
+        status: 'not-started' as const,
+        score: null,
+        points,
+        kpiWeightTotal,
+      };
     }
 
     const { missingNotes } = blockers(rows);
@@ -117,10 +128,19 @@ export async function getManagerTeam(managerId: string, fiscalYear: string): Pro
         status: 'note-pending' as const,
         score: weightedScoreOf(rows),
         points,
+        kpiWeightTotal,
       };
     }
 
-    return { id: report.id, name: report.name, title: report.title, status: 'in-progress' as const, score: null, points };
+    return {
+      id: report.id,
+      name: report.name,
+      title: report.title,
+      status: 'in-progress' as const,
+      score: null,
+      points,
+      kpiWeightTotal,
+    };
   });
 
   return { team, cycles };

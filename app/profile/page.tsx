@@ -17,5 +17,5 @@ export default async function ProfilePage() {
   const data = await getProfileData(session.user.employeeId);
   if (!data) forbidden();
 
-  return <ProfileScreen data={data} own editable={false} />;
+  return <ProfileScreen data={data} own editable={false} canEditKpis={false} />;
 }

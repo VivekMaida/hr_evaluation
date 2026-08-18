@@ -107,3 +107,13 @@ export type AnnualReview = {
 
 /** Mirrors the Prisma `Role` enum. */
 export type Role = 'EMPLOYEE' | 'MANAGER' | 'HR';
+
+/** Mirrors the Prisma `KpiType` enum. */
+export type KpiType = 'HIGHER_IS_BETTER' | 'LOWER_IS_BETTER' | 'MILESTONE' | 'QUALITATIVE';
+
+export const KPI_TYPE_LABEL: Record<KpiType, string> = {
+  HIGHER_IS_BETTER: 'Higher is better',
+  LOWER_IS_BETTER: 'Lower is better',
+  MILESTONE: 'Milestone',
+  QUALITATIVE: 'Qualitative',
+};

@@ -20,6 +20,7 @@
  * and prisma/seed-pilot.ts, not this file.
  */
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 import { PrismaClient, type CycleState, type Role } from '@prisma/client';
 import { FISCAL_YEAR } from '../lib/constants';
 import { TEAM, CURRENT_USER, ENTRY_KRAS } from '../lib/data';
@@ -210,12 +211,18 @@ async function main() {
   // KPI set per employee.
   for (const member of TEAM) {
     for (const kpi of KPI_TEMPLATE) {
+      // effectiveFrom: 1 — this fixture seed always targets the one
+      // original version of a KPI, same reasoning as seed-pilot.ts. A fresh
+      // KRA's lineageId is its own id — the identity later versions carry
+      // forward when this one gets edited.
+      const newId = randomUUID();
       await prisma.kpi.upsert({
         where: {
-          employeeId_fiscalYear_name: {
+          employeeId_fiscalYear_name_effectiveFrom: {
             employeeId: member.id,
             fiscalYear: FISCAL_YEAR,
             name: kpi.name,
+            effectiveFrom: 1,
           },
         },
         update: {
@@ -226,9 +233,12 @@ async function main() {
           sortOrder: kpi.sortOrder,
         },
         create: {
+          id: newId,
+          lineageId: newId,
           employeeId: member.id,
           fiscalYear: FISCAL_YEAR,
           name: kpi.name,
+          effectiveFrom: 1,
           basis: kpi.basis,
           unit: kpi.unit,
           weight: kpi.weight,

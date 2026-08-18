@@ -1,4 +1,4 @@
-import type { Kpi } from '@prisma/client';
+import type { KpiRow } from './kpi';
 
 /** A context note is required when achievement lands outside this band. */
 export const NOTE_BAND = { low: 70, high: 120 } as const;
@@ -79,22 +79,21 @@ export function blockers(rows: EntryRow[]): {
 type EntryRecord = { kpiId: string; actual: unknown; contextNote: string | null };
 
 /** Join the KPI set to whatever has been entered so far. */
-export function buildRows(kpis: Kpi[], entries: EntryRecord[]): EntryRow[] {
+export function buildRows(kpis: KpiRow[], entries: EntryRecord[]): EntryRow[] {
   const byKpi = new Map(entries.map((e) => [e.kpiId, e]));
 
   return kpis.map((kpi) => {
     const entry = byKpi.get(kpi.id);
-    const target = Number(kpi.target);
     const actual =
       entry?.actual === null || entry?.actual === undefined ? null : Number(entry.actual);
-    const achievement = achievementOf(target, actual, kpi.lowerIsBetter);
+    const achievement = achievementOf(kpi.target, actual, kpi.lowerIsBetter);
 
     return {
       kpiId: kpi.id,
       name: kpi.name,
       basis: kpi.basis,
-      weight: Number(kpi.weight),
-      target,
+      weight: kpi.weight,
+      target: kpi.target,
       lowerIsBetter: kpi.lowerIsBetter,
       actual,
       contextNote: entry?.contextNote ?? null,

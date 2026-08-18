@@ -10,6 +10,7 @@ import {
   priorFiscalYear,
   yearAverage as computeYearAverage,
 } from './employee-year';
+import { getKpiIdsByLineage, getKpiSetForCycle } from './kpi';
 import type { MonthPoint } from './types';
 
 /* ---------------------------------------------------------------------------
@@ -159,12 +160,14 @@ export async function getScorecardData(
 
   const base = { id: employee.id, name: employee.name, title: employee.title };
 
+  // Month 12 (March) rather than an unscoped "all rows for this fiscalYear"
+  // query — with effective-dated KPI versions, an edited KPI now has more
+  // than one row for the year, and the unscoped query would double it. Month
+  // 12 always resolves to whichever version is currently active, since a
+  // pending edit can never be scheduled past the fiscal year's last month.
   const [rawScores, kpis] = await Promise.all([
     getEmployeeCycleScores(employeeId, FISCAL_YEAR),
-    prisma.kpi.findMany({
-      where: { employeeId, fiscalYear: FISCAL_YEAR },
-      orderBy: { sortOrder: 'asc' },
-    }),
+    getKpiSetForCycle(employeeId, FISCAL_YEAR, 12),
   ]);
   const scores = options.maskOpenCycleData ? maskOpenCycle(rawScores) : rawScores;
 
@@ -209,14 +212,23 @@ export async function getScorecardData(
   const monthsLocked = lockedScores.filter((s) => s.weightedScore !== null).length;
 
   // `cycle` was never read off these rows — the join was pure overhead.
-  const entries = await prisma.monthlyEntry.findMany({
-    where: { employeeId, cycle: { fiscalYear: FISCAL_YEAR, state: 'LOCKED' } },
-  });
+  const [entries, idsByLineage] = await Promise.all([
+    prisma.monthlyEntry.findMany({
+      where: { employeeId, cycle: { fiscalYear: FISCAL_YEAR, state: 'LOCKED' } },
+    }),
+    getKpiIdsByLineage(employeeId, FISCAL_YEAR),
+  ]);
   const entriesByKpiAndCycle = new Map(entries.map((e) => [`${e.kpiId}:${e.cycleId}`, e]));
 
   subject.matrix = kpis.map((kpi) => {
+    // A locked month's entry was recorded against whichever version of this
+    // KRA was live that month — not necessarily `kpi`, the current one, if
+    // it's since been renamed or reweighted. Every id this lineage has ever
+    // used is tried; exactly one can match a given cycle, since versions'
+    // effective ranges never overlap.
+    const lineageIds = idsByLineage.get(kpi.lineageId) ?? [kpi.id];
     const closed = lockedScores.map((s) => {
-      const entry = entriesByKpiAndCycle.get(`${kpi.id}:${s.cycleId}`);
+      const entry = lineageIds.map((id) => entriesByKpiAndCycle.get(`${id}:${s.cycleId}`)).find(Boolean);
       return entry?.achievement === null || entry?.achievement === undefined
         ? null
         : Number(entry.achievement);

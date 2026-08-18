@@ -6,6 +6,7 @@ import { FISCAL_YEAR } from '@/lib/constants';
 import { prisma } from '@/lib/db';
 import { blockers, buildRows, weightedScoreOf } from '@/lib/entries';
 import { getEmployeeCycleScores, pointsFromCycleScores } from '@/lib/employee-year';
+import { getKpiSetForCycle } from '@/lib/kpi';
 
 export const runtime = 'nodejs';
 // Always hit the database; a cached month is a wrong month.
@@ -60,10 +61,11 @@ export async function GET(request: Request) {
     prisma.cycle.findUnique({
       where: { fiscalYear_monthIndex: { fiscalYear: FISCAL_YEAR, monthIndex } },
     }),
-    prisma.kpi.findMany({
-      where: { employeeId, fiscalYear: FISCAL_YEAR },
-      orderBy: { sortOrder: 'asc' },
-    }),
+    // The KPI set as it stood for *this* month specifically — not whichever
+    // rows currently exist, which with effective-dated versions could be a
+    // later (or not-yet-live) edit than what this month was actually scored
+    // against.
+    getKpiSetForCycle(employeeId, FISCAL_YEAR, monthIndex),
   ]);
 
   if (!employee || !cycle) {
@@ -130,10 +132,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const kpis = await prisma.kpi.findMany({
-    where: { employeeId, fiscalYear: FISCAL_YEAR },
-    orderBy: { sortOrder: 'asc' },
-  });
+  const kpis = await getKpiSetForCycle(employeeId, FISCAL_YEAR, monthIndex);
   const known = new Set(kpis.map((k) => k.id));
   const unknown = input.filter((r) => !known.has(r.kpiId));
   if (unknown.length > 0) {

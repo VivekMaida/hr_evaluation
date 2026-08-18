@@ -9,7 +9,7 @@ import { consistency, signed, trend } from '@/lib/score';
 import { signOutAction } from '@/app/login/actions';
 import { ChangePasswordForm } from './ChangePasswordForm';
 import { EditIdentityForm, type DepartmentOption, type ManagerOption } from './EditIdentityForm';
-import { EditKpiSetForm } from './EditKpiSetForm';
+import { KpiSetEditor } from './KpiSetEditor';
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -24,20 +24,23 @@ export function ProfileScreen({
   data,
   own,
   editable,
+  canEditKpis,
   departments,
   managers,
 }: {
   data: ProfileData;
   /** Viewing your own profile — shows the Account section. */
   own: boolean;
-  /** HR viewing someone else's — identity and KPIs become editable. */
+  /** HR viewing someone else's — identity becomes editable. */
   editable: boolean;
+  /** HR for anyone, or this employee's own manager — KPI set becomes editable. */
+  canEditKpis: boolean;
   departments?: DepartmentOption[];
   managers?: ManagerOption[];
 }) {
   const { identity, thisCycle, kpis, acknowledgements, record, lastLoginAtLabel, mustSetPassword } = data;
 
-  const totalWeight = kpis.items.reduce((sum, k) => sum + k.weight, 0);
+  const totalWeight = kpis.current.reduce((sum, k) => sum + k.weight, 0);
 
   return (
     <>
@@ -134,67 +137,72 @@ export function ProfileScreen({
         <Card style={{ padding: '20px 24px 22px' }}>
           <div className="spread" style={{ alignItems: 'baseline', marginBottom: 14 }}>
             <SectionLabel>{own ? 'My KPIs' : `${identity.name.split(' ')[0]}'s KPIs`}</SectionLabel>
-            <span style={{ fontSize: 13, color: 'var(--grey-body)' }}>
-              {kpis.fiscalYearLabel}
-              {kpis.effectiveDateLabel ? ` · in effect since ${kpis.effectiveDateLabel}` : ''}
-            </span>
+            <span style={{ fontSize: 13, color: 'var(--grey-body)' }}>{kpis.fiscalYearLabel}</span>
           </div>
 
-          {kpis.items.length === 0 ? (
+          {canEditKpis ? (
+            <KpiSetEditor employeeId={identity.id} kpis={kpis} />
+          ) : kpis.current.length === 0 ? (
             <div style={{ fontSize: 14, color: 'var(--grey-body)' }}>
               No KPI set has been published for this fiscal year yet.
             </div>
-          ) : editable ? (
-            <EditKpiSetForm employeeId={identity.id} items={kpis.items} />
           ) : (
-            <table className="data-table" style={{ fontSize: 14.5 }}>
-              <thead>
-                <tr>
-                  <th style={{ padding: '9px 12px' }}>Key result area</th>
-                  <th className="is-num" style={{ padding: '9px 10px', width: 80 }}>
-                    Weight
-                  </th>
-                  <th className="is-num" style={{ padding: '9px 10px', width: 110 }}>
-                    Annual target
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {kpis.items.map((kpi) => (
-                  <tr key={kpi.id}>
-                    <td style={{ padding: '10px 12px' }}>
-                      <div style={{ fontWeight: 700, color: 'var(--navy)' }}>{kpi.name}</div>
-                      <div style={{ fontSize: 12.5, color: 'var(--grey-body)' }}>
-                        {kpi.basis}
-                        {kpi.lowerIsBetter ? ' · lower is better' : ''}
-                      </div>
-                    </td>
-                    <td className="is-num" style={{ padding: '10px 10px' }}>
-                      {kpi.weight}%
-                    </td>
-                    <td className="is-num" style={{ padding: '10px 10px' }}>
-                      {kpi.target}
-                    </td>
+            <>
+              <table className="data-table" style={{ fontSize: 14.5 }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: '9px 12px' }}>Key result area</th>
+                    <th className="is-num" style={{ padding: '9px 10px', width: 80 }}>
+                      Weight
+                    </th>
+                    <th className="is-num" style={{ padding: '9px 10px', width: 110 }}>
+                      Annual target
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr style={{ borderTop: '2px solid var(--navy)' }}>
-                  <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--navy)' }}>Total</td>
-                  <td
-                    className="is-num"
-                    style={{
-                      padding: '10px 10px',
-                      fontWeight: 700,
-                      color: totalWeight === 100 ? 'var(--navy)' : 'var(--red)',
-                    }}
-                  >
-                    {totalWeight}%
-                  </td>
-                  <td />
-                </tr>
-              </tfoot>
-            </table>
+                </thead>
+                <tbody>
+                  {kpis.current.map((kpi) => (
+                    <tr key={kpi.id}>
+                      <td style={{ padding: '10px 12px' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--navy)' }}>{kpi.name}</div>
+                        <div style={{ fontSize: 12.5, color: 'var(--grey-body)' }}>
+                          {kpi.basis}
+                          {kpi.lowerIsBetter ? ' · lower is better' : ''}
+                        </div>
+                      </td>
+                      <td className="is-num" style={{ padding: '10px 10px' }}>
+                        {kpi.weight}%
+                      </td>
+                      <td className="is-num" style={{ padding: '10px 10px' }}>
+                        {kpi.target}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ borderTop: '2px solid var(--navy)' }}>
+                    <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--navy)' }}>Total</td>
+                    <td
+                      className="is-num"
+                      style={{
+                        padding: '10px 10px',
+                        fontWeight: 700,
+                        color: totalWeight === 100 ? 'var(--navy)' : 'var(--red)',
+                      }}
+                    >
+                      {totalWeight}%
+                    </td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+              <div style={{ fontSize: 12.5, color: 'var(--grey-body)', marginTop: 10 }}>
+                {kpis.effectiveDateLabel ? `In effect since ${kpis.effectiveDateLabel}. ` : ''}
+                {kpis.pending.length > 0
+                  ? `A change is scheduled, effective ${kpis.pendingFromLabel}.`
+                  : ''}
+              </div>
+            </>
           )}
         </Card>
 
