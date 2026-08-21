@@ -504,7 +504,7 @@ export function Scorecard({
               }}
             >
               {own
-                ? 'Marking a month as seen is optional and blocks nothing — the month counts and locks either way, and nobody will chase you for it. If you disagree with a month, raise a query on it: it goes to your manager, and both the question and the reply stay against that month.'
+                ? `Marking a month as seen is optional and blocks nothing — the month counts and locks either way, and nobody will chase you for it. If you disagree with a month, raise a query on it: it goes to ${subject.managerName ?? 'your manager'}, and both the question and the reply stay against that month.`
                 : 'Which months this person has confirmed seeing, and any question raised against a specific month. Acknowledging is optional and blocks nothing — an unacknowledged month still counts and still locks.'}
             </p>
             <table className="data-table" style={{ fontSize: 14 }}>
@@ -567,7 +567,7 @@ export function Scorecard({
                               </span>
                             </div>
                           ) : isManager ? (
-                            <RespondToQueryForm queryId={q.id} />
+                            <RespondToQueryForm queryId={q.id} employeeName={subject.name} />
                           ) : (
                             <Chip tone="amber" tight>
                               Awaiting response
@@ -575,7 +575,14 @@ export function Scorecard({
                           )}
                         </div>
                       ))}
-                      {own ? <RaiseQueryForm cycleId={month.cycleId} /> : null}
+                      {own ? (
+                        <div style={{ marginTop: month.queries.length > 0 ? 8 : 0 }}>
+                          <RaiseQueryForm
+                            cycleId={month.cycleId}
+                            managerName={subject.managerName}
+                          />
+                        </div>
+                      ) : null}
                     </td>
                   </tr>
                 ))}

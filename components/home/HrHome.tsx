@@ -2,6 +2,8 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { Card, Chip, SectionLabel } from '@/components/ui';
 import { todayLabel } from '@/lib/constants';
 import { completenessCell, type DepartmentCompleteness, type OrgCompleteness, type PendingException } from '@/lib/org';
+import type { OpenQuery } from '@/lib/queries';
+import { OpenQueriesCard } from './OpenQueriesCard';
 
 const MONTH_HEADS = [
   'APR',
@@ -132,11 +134,21 @@ function LegendSwatch({ colour, children }: { colour: string; children: string }
 export function HrHome({
   completeness,
   exceptions,
+  openQueries,
 }: {
   completeness: OrgCompleteness;
   exceptions: PendingException[];
+  /** Every unanswered query in the pilot, oldest first. */
+  openQueries: OpenQuery[];
 }) {
   const { totals, departments, total } = completeness;
+  // "oldest 0 days" is how a queue that is entirely from this morning reads
+  // if the number is printed unconditionally.
+  const oldestDays = openQueries.length
+    ? Math.max(...openQueries.map((q) => q.daysWaiting))
+    : 0;
+  const oldestQueryLabel =
+    oldestDays === 0 ? 'all asked today' : `oldest ${oldestDays} day${oldestDays === 1 ? '' : 's'}`;
 
   return (
     <>
@@ -161,7 +173,13 @@ export function HrHome({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+            /* auto-fit, not a fixed five: the widest label here
+               ("Departments under 80%") measures 182px, so a card narrower
+               than ~226px wraps it onto a second line. Below that the row
+               drops to four columns and lets the fifth card fall to the next
+               line, which keeps every label on one line at any width. Five
+               across needs roughly a 1540px window. */
+            gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
             gap: 18,
           }}
         >
@@ -199,6 +217,20 @@ export function HrHome({
               </div>
               <div style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
                 {totals.departmentsUnder80Names}
+              </div>
+            </div>
+          </Card>
+
+          <Card tone="amber" style={{ padding: '18px 22px 20px' }}>
+            <div className="stack" style={{ gap: 5 }}>
+              <SectionLabel tone="amber">Open queries</SectionLabel>
+              <div className="num" style={{ fontSize: 36, fontWeight: 600, color: 'var(--navy)', lineHeight: 1.05 }}>
+                {openQueries.length}
+              </div>
+              <div style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
+                {openQueries.length === 0
+                  ? 'No question is waiting on a manager'
+                  : `Awaiting a manager's reply · ${oldestQueryLabel}`}
               </div>
             </div>
           </Card>
@@ -342,11 +374,17 @@ export function HrHome({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
             gap: 18,
             alignItems: 'start',
           }}
         >
+          <OpenQueriesCard
+            queries={openQueries}
+            showManager
+            emptyNote="Nobody in the pilot has an unanswered question."
+          />
+
           <Card tone="navy" style={{ padding: '20px 22px 22px' }}>
             <div className="stack" style={{ gap: 10 }}>
               <SectionLabel tone="navy">Needs a conversation</SectionLabel>

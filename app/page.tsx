@@ -9,6 +9,7 @@ import { LeadHome } from '@/components/home/LeadHome';
 import { EMPLOYEE_RECORD_VISIBILITY, FISCAL_YEAR } from '@/lib/constants';
 import { getEmployeeHomeData } from '@/lib/employee-home';
 import { getOrgCompleteness, getPendingExceptions } from '@/lib/org';
+import { getAllOpenQueries } from '@/lib/queries';
 import { getLeadHomeData } from '@/lib/team';
 
 export const dynamic = 'force-dynamic';
@@ -19,11 +20,16 @@ export default async function HomePage() {
 
   switch (session.user.role) {
     case 'HR': {
-      const [completeness, exceptions] = await Promise.all([
+      const [completeness, exceptions, openQueries] = await Promise.all([
         getOrgCompleteness(FISCAL_YEAR),
         getPendingExceptions(),
+        // Pilot-wide, not per-person: HR's whole job here is spotting the
+        // question whose manager has not noticed it.
+        getAllOpenQueries(),
       ]);
-      return <HrHome completeness={completeness} exceptions={exceptions} />;
+      return (
+        <HrHome completeness={completeness} exceptions={exceptions} openQueries={openQueries} />
+      );
     }
     case 'MANAGER': {
       const data = await getLeadHomeData(session.user.employeeId, FISCAL_YEAR);

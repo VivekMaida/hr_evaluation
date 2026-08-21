@@ -6,6 +6,7 @@ import { YearStrip } from '@/components/YearStrip';
 import { Card, Chip, Screen, SectionLabel } from '@/components/ui';
 import { FISCAL_YEAR } from '@/lib/constants';
 import { prisma } from '@/lib/db';
+import { getOpenQueriesForEmployees, openQueryCountByEmployee } from '@/lib/queries';
 import { STATUS_CHIP, getManagerTeam } from '@/lib/team';
 
 export const metadata = { title: 'My Team · M3M Perform' };
@@ -25,6 +26,10 @@ export default async function MyTeamPage() {
     getManagerTeam(session.user.employeeId, FISCAL_YEAR),
   ]);
 
+  // One MonthQuery read for the whole roster, after the team is known.
+  const openQueries = await getOpenQueriesForEmployees(team.map((m) => m.id));
+  const queryCountById = openQueryCountByEmployee(openQueries);
+
   const outOfBalance = team.filter((m) => m.kpiWeightTotal !== 100).length;
 
   return (
@@ -38,14 +43,22 @@ export default async function MyTeamPage() {
         <Card style={{ padding: '20px 24px 22px' }}>
           <div className="spread" style={{ alignItems: 'baseline', marginBottom: 16 }}>
             <SectionLabel>Full roster · {FISCAL_YEAR}</SectionLabel>
-            <span
-              className="num"
-              style={{ fontSize: 13, color: outOfBalance > 0 ? 'var(--red)' : 'var(--grey-body)' }}
-            >
-              {outOfBalance > 0
-                ? `${outOfBalance} of ${team.length} KPI sets don't total 100%`
-                : `All ${team.length} KPI sets total 100%`}
-            </span>
+            <div className="row" style={{ gap: 16, flex: 'none' }}>
+              {openQueries.length > 0 ? (
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--amber)' }}>
+                  {openQueries.length} open quer
+                  {openQueries.length === 1 ? 'y' : 'ies'} awaiting your reply
+                </span>
+              ) : null}
+              <span
+                className="num"
+                style={{ fontSize: 13, color: outOfBalance > 0 ? 'var(--red)' : 'var(--grey-body)' }}
+              >
+                {outOfBalance > 0
+                  ? `${outOfBalance} of ${team.length} KPI sets don't total 100%`
+                  : `All ${team.length} KPI sets total 100%`}
+              </span>
+            </div>
           </div>
 
           <table className="data-table" style={{ fontSize: 14.5 }}>
@@ -70,6 +83,7 @@ export default async function MyTeamPage() {
                 team.map((member) => {
                   const chip = STATUS_CHIP[member.status];
                   const balanced = member.kpiWeightTotal === 100;
+                  const queryCount = queryCountById.get(member.id) ?? 0;
                   return (
                     <tr key={member.id}>
                       <td style={{ padding: '10px 12px' }}>
@@ -77,6 +91,16 @@ export default async function MyTeamPage() {
                         <div style={{ fontSize: 12.5, color: 'var(--grey-body)' }}>
                           {member.title} · {member.id}
                         </div>
+                        {queryCount > 0 ? (
+                          <Link
+                            href={`/scorecard/${member.id}`}
+                            style={{ display: 'inline-block', marginTop: 4, textDecoration: 'none' }}
+                          >
+                            <Chip tone="amber" tight>
+                              {queryCount} open quer{queryCount === 1 ? 'y' : 'ies'}
+                            </Chip>
+                          </Link>
+                        ) : null}
                       </td>
                       <td style={{ padding: '10px 12px' }}>
                         <Chip tone={chip.tone} tight>

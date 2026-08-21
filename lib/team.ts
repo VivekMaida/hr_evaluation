@@ -3,6 +3,7 @@ import { prisma } from './db';
 import { blockers, buildRows, weightedScoreOf } from './entries';
 import { getEmployeeCycleScoresBatch, pointsFromCycleScores } from './employee-year';
 import { getKpiSetForCycleBatch, weightTotal } from './kpi';
+import { getOpenQueriesForEmployees, type OpenQuery } from './queries';
 import type { MonthPoint } from './types';
 
 /* ---------------------------------------------------------------------------
@@ -165,6 +166,13 @@ export type LeadHomeData = {
     previous: { label: string; average: number | null };
   } | null;
   awaitingNoteCount: number;
+  /**
+   * Unanswered questions from this manager's own reports, oldest first. On
+   * Home because nothing else told them one had been asked: a query is
+   * answerable only from the asker's Scorecard, so without this the manager
+   * had to already be on that screen to find out it existed.
+   */
+  openQueries: OpenQuery[];
   recentActivity: { who: string | null; what: string; when: string; by: string }[];
 };
 
@@ -224,6 +232,7 @@ export async function getLeadHomeData(
       : null;
 
   const reportIds = team.map((m) => m.id);
+  const openQueries = await getOpenQueriesForEmployees(reportIds);
   const logs = await prisma.activityLog.findMany({
     where: { OR: [{ employeeId: { in: reportIds } }, { actorId: managerId }] },
     include: { employee: { select: { name: true } } },
@@ -270,6 +279,7 @@ export async function getLeadHomeData(
     dueNow: { logged, total: team.length, outstandingNames },
     scoreTrend,
     awaitingNoteCount,
+    openQueries,
     recentActivity,
   };
 }

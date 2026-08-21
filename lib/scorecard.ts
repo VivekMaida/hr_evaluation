@@ -124,6 +124,13 @@ export type ScorecardSubject = {
   id: string;
   name: string;
   identity: string;
+  /**
+   * This person's own manager, the only place a query can route to. null when
+   * they have no lead on record, in which case the query box is not offered
+   * at all (raiseQuery would refuse it anyway). Held as its own field rather
+   * than parsed back out of `identity`, which is a display string.
+   */
+  managerName: string | null;
   points: MonthPoint[];
   monthsLogged: number;
   /** How many of the twelve months this person is actually eligible for — see eligibleFromMonthIndex(). */
@@ -236,6 +243,7 @@ export async function getScorecardData(
     id: employee.id,
     name: employee.name,
     identity: identityParts.join(' · '),
+    managerName: lead?.name ?? null,
     points,
     monthsLogged: months,
     eligibleMonths,

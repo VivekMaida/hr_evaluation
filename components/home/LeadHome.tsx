@@ -4,7 +4,9 @@ import { YearStrip } from '@/components/YearStrip';
 import { Card, Chip, ProgressBar, Screen, SectionLabel, StatCard } from '@/components/ui';
 import { todayLabel } from '@/lib/constants';
 import { signed } from '@/lib/score';
+import { openQueryCountByEmployee } from '@/lib/queries';
 import { STATUS_CHIP, type LeadHomeData } from '@/lib/team';
+import { OpenQueriesCard } from './OpenQueriesCard';
 
 function outstandingSentence(names: string[]): string {
   if (names.length === 0) return 'Every entry is in.';
@@ -15,9 +17,29 @@ function outstandingSentence(names: string[]): string {
   return `${count} ${noun} outstanding — ${names.join(', ')}.`;
 }
 
+/**
+ * The per-person marker. A link rather than a bare chip: the only place the
+ * question can be read and answered is that person's Scorecard.
+ */
+function OpenQueryMarker({ employeeId, count }: { employeeId: string; count: number }) {
+  if (count === 0) return null;
+  return (
+    <Link
+      href={`/scorecard/${employeeId}`}
+      style={{ display: 'inline-block', marginTop: 4, textDecoration: 'none' }}
+    >
+      <Chip tone="amber" tight>
+        {count} open quer{count === 1 ? 'y' : 'ies'}
+      </Chip>
+    </Link>
+  );
+}
+
 export function LeadHome({ data }: { data: LeadHomeData }) {
-  const { manager, openCycle, team, dueNow, scoreTrend, awaitingNoteCount, recentActivity } = data;
+  const { manager, openCycle, team, dueNow, scoreTrend, awaitingNoteCount, openQueries, recentActivity } =
+    data;
   const openMonthShort = openCycle?.label.split(' ')[0] ?? 'This month';
+  const queryCountById = openQueryCountByEmployee(openQueries);
 
   return (
     <>
@@ -85,7 +107,7 @@ export function LeadHome({ data }: { data: LeadHomeData }) {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
             gap: 18,
           }}
         >
@@ -121,7 +143,27 @@ export function LeadHome({ data }: { data: LeadHomeData }) {
             value={String(awaitingNoteCount)}
             foot="Actuals outside the 70–120% band"
           />
+          <StatCard
+            label="Open queries"
+            labelTone="amber"
+            tone="amber"
+            value={String(openQueries.length)}
+            foot={
+              openQueries.length === 0
+                ? 'Nothing from your team is waiting on you'
+                : 'Questions from your team awaiting your reply'
+            }
+          />
         </div>
+
+        {/* Only when there is something to answer. An empty card every month
+            would train the eye to skip the one month it is not empty. */}
+        {openQueries.length > 0 ? (
+          <OpenQueriesCard
+            queries={openQueries}
+            emptyNote="Nobody on your team has an unanswered question."
+          />
+        ) : null}
 
         <div
           style={{
@@ -181,6 +223,10 @@ export function LeadHome({ data }: { data: LeadHomeData }) {
                           <div style={{ fontSize: 12.5, color: 'var(--grey-body)' }}>
                             {member.title} · {member.id}
                           </div>
+                          <OpenQueryMarker
+                            employeeId={member.id}
+                            count={queryCountById.get(member.id) ?? 0}
+                          />
                         </td>
                         <td style={{ padding: '10px 12px' }}>
                           <Chip tone={chip.tone} tight>
