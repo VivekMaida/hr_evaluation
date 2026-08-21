@@ -180,6 +180,26 @@ export function maskOpenCycle(scores: CycleScore[]): CycleScore[] {
   return scores.map((s) => (s.state === 'OPEN' ? { ...s, weightedScore: null, submittedAt: null } : s));
 }
 
+/**
+ * Eligible months that have actually begun — everything except the ones still
+ * in the future.
+ *
+ * This is the denominator for anything an employee reads about their own
+ * record. `eligibleMonthCount()` counts the whole remaining year, which is the
+ * right base for "can this be rated yet" but the wrong one for "how am I
+ * doing": in August of an August-to-March programme it turns a complete record
+ * into "1 of 8", i.e. seven months the person appears to be missing but which
+ * have not happened. Coverage against elapsed months reads 1 of 1.
+ */
+export function elapsedEligibleMonths(scores: CycleScore[], fromIndex = 1): number {
+  return scores.filter((s) => s.monthIndex >= fromIndex && s.state !== 'FUTURE').length;
+}
+
+/** "August 2026" -> "August". Cycle labels carry the year; prose rarely wants it. */
+export function monthNameOf(cycleLabel: string): string {
+  return cycleLabel.split(' ')[0];
+}
+
 export function monthsLogged(scores: CycleScore[], fromIndex = 1): number {
   return scores.filter((s) => s.monthIndex >= fromIndex && s.weightedScore !== null).length;
 }

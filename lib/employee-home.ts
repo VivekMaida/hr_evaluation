@@ -3,8 +3,10 @@ import { prisma } from './db';
 import {
   eligibleFromMonthIndex,
   eligibleMonthCount,
+  elapsedEligibleMonths,
   getEmployeeCycleScores,
   maskOpenCycle,
+  monthNameOf,
   monthsLogged,
   yearAverage as computeYearAverage,
   pointsFromCycleScores,
@@ -23,6 +25,14 @@ export type EmployeeHomeData = {
   monthsLogged: number;
   /** How many of the twelve months this person is actually eligible for — see eligibleFromMonthIndex(). */
   eligibleMonths: number;
+  /**
+   * Eligible months that have already begun. Coverage an employee reads about
+   * themselves is measured against this, not `eligibleMonths` — see
+   * elapsedEligibleMonths().
+   */
+  elapsedMonths: number;
+  /** Every month with a score, oldest first — the basis for the headline figures. */
+  loggedMonths: { month: MonthKey; name: string; score: number }[];
   yearAverage: number | null;
   /** The most recently locked month, for the year-strip ring and the notification. */
   latestLocked: {
@@ -72,11 +82,22 @@ export async function getEmployeeHomeData(
     };
   }
 
+  const loggedMonths = scores
+    .filter((s) => s.monthIndex >= fromIndex && s.weightedScore !== null)
+    .sort((a, b) => a.monthIndex - b.monthIndex)
+    .map((s) => ({
+      month: FY_MONTHS[s.monthIndex - 1],
+      name: monthNameOf(s.label),
+      score: s.weightedScore as number,
+    }));
+
   return {
     employee,
     points,
     monthsLogged: monthsLogged(scores, fromIndex),
     eligibleMonths,
+    elapsedMonths: elapsedEligibleMonths(scores, fromIndex),
+    loggedMonths,
     yearAverage: computeYearAverage(scores),
     latestLocked,
   };

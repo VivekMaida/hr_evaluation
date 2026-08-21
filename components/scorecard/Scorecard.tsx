@@ -88,7 +88,7 @@ export function Scorecard({
   isManager?: boolean;
 }) {
   const band = coverageBand(subject.monthsLogged, subject.eligibleMonths);
-  const suppressed = band === 'insufficient';
+  const thinCoverage = band === 'insufficient';
   const sd = consistency(subject.points);
   const delta = trend(subject.points);
   const h = halves(subject.points);
@@ -121,7 +121,7 @@ export function Scorecard({
           gap: 18,
         }}
       >
-        {suppressed ? (
+        {thinCoverage ? (
           <div
             className={missedCount > 0 ? 'callout callout--alert' : 'callout callout--info'}
             style={{
@@ -146,8 +146,8 @@ export function Scorecard({
               <div style={{ fontSize: 14, lineHeight: 1.55, color: 'var(--grey-body)' }}>
                 {missedCount > 0 ? (
                   <>
-                    {missedCount} eligible month{missedCount === 1 ? '' : 's'}{' '}
-                    {missedCount === 1 ? 'closed' : 'closed'} with nothing logged
+                    {missedCount} eligible month{missedCount === 1 ? '' : 's'} closed with nothing
+                    logged
                     {subject.monthsToCome > 0
                       ? `, and ${subject.monthsToCome} more ${subject.monthsToCome === 1 ? 'is' : 'are'} still to come`
                       : ''}
@@ -155,15 +155,24 @@ export function Scorecard({
                   </>
                 ) : (
                   <>
-                    Nothing has been missed — {subject.monthsToCome} of this person&rsquo;s{' '}
-                    {subject.eligibleMonths} eligible months {subject.monthsToCome === 1 ? 'is' : 'are'}{' '}
-                    simply still to come.{' '}
+                    Nothing has been missed — {subject.monthsToCome} of{' '}
+                    {own ? 'your' : 'this person’s'} {subject.eligibleMonths} months{' '}
+                    {subject.monthsToCome === 1 ? 'is' : 'are'} simply still to come.{' '}
                   </>
                 )}
-                Every figure here is calculated on what exists, not on the year, so it is not a
-                basis for an annual rating until coverage reaches{' '}
-                {partialThresholdMonths(subject.eligibleMonths)} months or HR approves an exception.
-                The matrix below shows every month on record.
+                {own ? (
+                  <>
+                    Every figure here is worked out from the months on record, not from the whole
+                    year. The matrix below shows each of them.
+                  </>
+                ) : (
+                  <>
+                    Every figure here is calculated on what exists, not on the year, so it is not
+                    yet a fair basis for an annual rating — that needs{' '}
+                    {partialThresholdMonths(subject.eligibleMonths)} months on record, or an
+                    approved exception. The matrix below shows every month on record.
+                  </>
+                )}
               </div>
             </div>
             {missedCount > 0 ? (
@@ -230,39 +239,43 @@ export function Scorecard({
             >
               <ContextFigure
                 label="Year average"
-                tone={suppressed ? 'grey' : 'navy'}
+                tone={thinCoverage ? 'grey' : 'navy'}
                 value={subject.yearAverage.toFixed(1)}
-                foot={
-                  suppressed
-                    ? `Mean of ${subject.monthsLogged} — indicative`
-                    : `Mean of ${subject.monthsLogged} months`
-                }
+                foot={`Based on ${subject.monthsLogged} month${
+                  subject.monthsLogged === 1 ? '' : 's'
+                }`}
               />
               <ContextFigure
                 label="Consistency"
-                tone={suppressed ? 'grey' : 'navy'}
+                tone={thinCoverage ? 'grey' : 'navy'}
                 value={consistencyLabel(sd, subject.monthsLogged)}
                 foot={
-                  suppressed || sd === null
+                  thinCoverage || sd === null
                     ? 'Needs 6 or more months'
                     : `SD ${sd.toFixed(1)}`
                 }
               />
               <ContextFigure
                 label="Trend"
-                tone={suppressed ? 'grey' : 'navy'}
-                value={suppressed ? '—' : trendLabel(delta)}
+                tone={thinCoverage ? 'grey' : 'navy'}
+                value={thinCoverage ? '—' : trendLabel(delta)}
                 foot={
-                  suppressed || delta === null || h === null
+                  thinCoverage || delta === null || h === null
                     ? 'No comparable halves'
                     : `${h.first.toFixed(1)} → ${h.second.toFixed(1)} · ${signed(delta)}`
                 }
               />
               <ContextFigure
                 label="Coverage"
-                tone={suppressed ? 'red' : 'navy'}
+                tone={missedCount > 0 ? 'red' : 'navy'}
                 value={`${subject.monthsLogged} of ${subject.eligibleMonths}`}
-                foot={suppressed ? 'Insufficient' : 'Complete to date'}
+                foot={
+                  missedCount > 0
+                    ? `${missedCount} month${missedCount === 1 ? '' : 's'} closed empty`
+                    : subject.monthsToCome > 0
+                      ? `${subject.monthsToCome} still to come`
+                      : 'Every month is in'
+                }
               />
             </div>
           </div>

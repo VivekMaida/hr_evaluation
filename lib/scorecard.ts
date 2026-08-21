@@ -64,9 +64,15 @@ export function coverageBand(monthsLogged: number, eligibleMonths: number): Cove
   return 'insufficient';
 }
 
-/** Steady under 8, Variable 8–15, Erratic above. Suppressed under 6 months. */
+/**
+ * Fewer than this and a standard deviation is noise rather than a signal, so
+ * consistency is not reported at all.
+ */
+export const CONSISTENCY_MIN_MONTHS = 6;
+
+/** Steady under 8, Variable 8–15, Erratic above; nothing under 6 months. */
 export function consistencyLabel(sd: number | null, months: number): string {
-  if (sd === null || months < 6) return '—';
+  if (sd === null || months < CONSISTENCY_MIN_MONTHS) return '—';
   if (sd < 8) return 'Steady';
   if (sd <= 15) return 'Variable';
   return 'Erratic';

@@ -15,15 +15,20 @@ import { BANDS, type ReviewSubject } from '@/lib/reviews';
  * headline figure. The words are the point.
  */
 export function CurrentRating({ subject: S, own }: { subject: ReviewSubject; own: boolean }) {
-  const insufficient = S.coverage === 'insufficient';
+  // Whether the record is yet a fair basis for a rating. Surfaced only to the
+  // people who act on it: on their own record an employee can do nothing about
+  // coverage, and an amber card telling them their year is too short reads as a
+  // mark against them. The plain-language basis line below is shown to
+  // everyone, which is what an employee actually needs.
+  const cautionThinCoverage = S.coverage === 'insufficient' && !own;
 
   return (
     <Card
-      tone={insufficient ? 'amber' : 'navy'}
+      tone={cautionThinCoverage ? 'amber' : 'navy'}
       style={{ padding: '22px 26px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}
     >
       <div className="spread" style={{ alignItems: 'baseline', gap: 16 }}>
-        <SectionLabel tone={insufficient ? 'amber' : 'navy'}>
+        <SectionLabel tone={cautionThinCoverage ? 'amber' : 'navy'}>
           {own ? `Your rating · ${FY_LABEL}` : `Rating · ${FY_LABEL}`}
         </SectionLabel>
         <Chip tone={S.stillAccruing ? 'cyan' : 'green'} tight>
@@ -78,10 +83,11 @@ export function CurrentRating({ subject: S, own }: { subject: ReviewSubject; own
           recalculated every time a month locks
           {S.stillAccruing ? ' — it will move as the remaining months come in' : ''}.
         </div>
-        {insufficient ? (
+        {cautionThinCoverage ? (
           <div style={{ fontSize: 13.5, lineHeight: 1.55, color: 'var(--amber)', fontWeight: 700 }}>
-            Coverage is thin — too few months are on record for this band to carry the weight of a
-            full-year rating yet.
+            Too few months are on record for this band to be treated as a full-year rating. A band
+            built on {S.monthsLogged} month{S.monthsLogged === 1 ? '' : 's'} can move a long way
+            before the year is out.
           </div>
         ) : null}
       </div>

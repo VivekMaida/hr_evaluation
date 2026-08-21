@@ -4,7 +4,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { YearStrip } from '@/components/YearStrip';
 import { Card, Chip, SectionLabel } from '@/components/ui';
 import type { ProfileData } from '@/lib/profile';
-import { coverageBand, consistencyLabel, trendLabel } from '@/lib/scorecard';
+import { consistencyLabel, trendLabel } from '@/lib/scorecard';
 import { consistency, signed, trend } from '@/lib/score';
 import { signOutAction } from '@/app/login/actions';
 import { ChangePasswordForm } from './ChangePasswordForm';
@@ -298,7 +298,6 @@ export function ProfileScreen({
 function MyRecordBody({ subject }: { subject: import('@/lib/scorecard').ScorecardSubject }) {
   const sd = consistency(subject.points);
   const delta = trend(subject.points);
-  const band = coverageBand(subject.monthsLogged, subject.eligibleMonths);
 
   return (
     <>
@@ -343,9 +342,9 @@ function MyRecordBody({ subject }: { subject: import('@/lib/scorecard').Scorecar
             </div>
           </div>
         </Card>
-        <Card tone={band === 'insufficient' ? 'red' : 'navy'} style={{ padding: '16px 18px' }}>
+        <Card tone="navy" style={{ padding: '16px 18px' }}>
           <div className="stack" style={{ gap: 5 }}>
-            <SectionLabel tone={band === 'insufficient' ? 'red' : 'navy'}>Coverage</SectionLabel>
+            <SectionLabel tone="navy">Coverage</SectionLabel>
             <div className="num" style={{ fontSize: 22, fontWeight: 600, color: 'var(--navy)' }}>
               {subject.monthsLogged}{' '}
               <span style={{ fontSize: 14, fontWeight: 400 }}>of {subject.eligibleMonths}</span>
