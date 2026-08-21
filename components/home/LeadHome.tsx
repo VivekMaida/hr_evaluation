@@ -107,7 +107,13 @@ export function LeadHome({ data }: { data: LeadHomeData }) {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+            /* auto-fit, matching HR Home's row and for the same reason: the
+               widest label here is "Team score · September" at 180px, so a
+               card under ~225px wraps it onto a second line. Note the widest
+               case is a month name this screen only shows for part of the
+               year — August, the pilot's first month, is 24px shorter. Below
+               the floor the row drops a column instead of squeezing. */
+            gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
             gap: 18,
           }}
         >
