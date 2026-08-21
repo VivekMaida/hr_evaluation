@@ -95,4 +95,4 @@ export const SHOW_PROFILE_RECORD = false;
  * sees; they always see everything.
  */
 export type EmployeeRecordVisibility = 'hidden' | 'after-lock' | 'immediate';
-export const EMPLOYEE_RECORD_VISIBILITY: EmployeeRecordVisibility = 'hidden';
+export const EMPLOYEE_RECORD_VISIBILITY: EmployeeRecordVisibility = 'immediate';

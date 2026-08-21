@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { EmptyState } from '@/components/EmptyState';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { YearStrip } from '@/components/YearStrip';
 import { Screen, StatCard } from '@/components/ui';
@@ -13,6 +14,33 @@ import { consistency, signed, trend } from '@/lib/score';
  */
 export function EmployeeHome({ data }: { data: EmployeeHomeData }) {
   const { employee, points, monthsLogged, eligibleMonths, yearAverage, latestLocked } = data;
+
+  // Nothing on record yet — a year strip of empty tracks over four "—" cards
+  // reads as a broken screen, so say plainly that there is nothing to show.
+  // Matches the empty states Scorecard and Reviews already render.
+  if (monthsLogged === 0) {
+    return (
+      <>
+        <ScreenHeader title="Home" meta={employee.name} />
+        <EmptyState
+          label="Nothing logged yet"
+          heading="No month has been logged for you yet"
+          body={
+            <>
+              Your reporting manager logs one score a month against your KPI set. As soon as the
+              first month is submitted it appears here, and on your{' '}
+              <Link href="/scorecard" style={{ fontWeight: 700 }}>
+                Scorecard
+              </Link>
+              .
+            </>
+          }
+          foot={`0 of ${eligibleMonths} eligible months · ${FY_LABEL}`}
+        />
+      </>
+    );
+  }
+
   const band = coverageBand(monthsLogged, eligibleMonths);
   const suppressed = band === 'insufficient';
   const sd = consistency(points);

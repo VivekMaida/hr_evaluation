@@ -1,5 +1,8 @@
+import Link from 'next/link';
 import { forbidden, redirect } from 'next/navigation';
 import { auth } from '@/auth';
+import { EmptyState } from '@/components/EmptyState';
+import { ScreenHeader } from '@/components/ScreenHeader';
 import { EmployeeHome } from '@/components/home/EmployeeHome';
 import { HrHome } from '@/components/home/HrHome';
 import { LeadHome } from '@/components/home/LeadHome';
@@ -28,7 +31,34 @@ export default async function HomePage() {
       return <LeadHome data={data} />;
     }
     case 'EMPLOYEE': {
-      if (EMPLOYEE_RECORD_VISIBILITY === 'hidden') redirect('/profile');
+      // Home never redirects. It used to bounce to /profile under the
+      // 'hidden' policy, which broke the one navigation an employee
+      // actually makes: clicking "Home" from Profile is a client-side
+      // navigation, and when the destination only answers with a redirect
+      // back to the route they are already on, the App Router swaps the URL
+      // to "/" and has nothing to render — a blank screen. Every branch
+      // below returns markup instead, so Home always shows something.
+      if (EMPLOYEE_RECORD_VISIBILITY === 'hidden') {
+        return (
+          <>
+            <ScreenHeader title="Home" meta={session.user.name ?? undefined} />
+            <EmptyState
+              label="Not available yet"
+              heading="Your record isn't open to you yet"
+              body={
+                <>
+                  Your reporting manager logs your months as the year runs, but your own view of
+                  the record hasn&rsquo;t been switched on for this pilot yet. Your{' '}
+                  <Link href="/profile" style={{ fontWeight: 700 }}>
+                    Profile
+                  </Link>{' '}
+                  shows the KPI set you are being measured against in the meantime.
+                </>
+              }
+            />
+          </>
+        );
+      }
       const data = await getEmployeeHomeData(session.user.employeeId, FISCAL_YEAR, {
         maskOpenCycleData: EMPLOYEE_RECORD_VISIBILITY === 'after-lock',
       });
