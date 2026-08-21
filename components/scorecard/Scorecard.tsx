@@ -1,14 +1,10 @@
-import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { CoverageBar } from '@/components/CoverageBar';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { YearStrip } from '@/components/YearStrip';
 import { Card, Chip, SectionLabel } from '@/components/ui';
 import { FY_LABEL, FY_RANGE_LABEL } from '@/lib/constants';
-import type { ContextNote } from '@/lib/context-notes';
-import type { LockedMonthRow } from '@/lib/locked-months';
+import type { RecordMonthRow } from '@/lib/record-months';
 import {
-  COVERAGE_BANDS,
   consistencyLabel,
   coverageBand,
   matrixCellColour,
@@ -17,56 +13,75 @@ import {
   type ScorecardSubject,
 } from '@/lib/scorecard';
 import { consistency, halves, signed, trend } from '@/lib/score';
-import { FY_MONTHS } from '@/lib/types';
+import { FY_MONTHS, type MonthStatus } from '@/lib/types';
 import { AcknowledgeButton } from './AcknowledgeButton';
 import { RaiseQueryForm } from './RaiseQueryForm';
 import { RespondToQueryForm } from './RespondToQueryForm';
 
 const MONTH_HEADS = FY_MONTHS.map((m) => m.toUpperCase());
 
-function StatShell({
+/**
+ * The Scorecard answers "where did the score come from" — which KRAs are
+ * strong, which are weak, which are moving. The KRA × month matrix is that
+ * answer, so it is the substance of the screen and is published from the first
+ * month on record. The year strip and the four headline figures sit above it as
+ * context only; the appraisal argument (bands, the note trail, the recency
+ * check) is Reviews' job and is linked to, not repeated here.
+ */
+
+/** A compact figure for the context band — deliberately not a 36px stat card. */
+function ContextFigure({
   label,
-  labelTone,
-  tone,
-  children,
+  value,
   foot,
-  footTone,
+  tone = 'navy',
 }: {
   label: string;
-  labelTone: 'navy' | 'grey' | 'red' | 'green';
-  tone: 'navy' | 'red' | 'green';
-  children: ReactNode;
-  foot: ReactNode;
-  footTone?: string;
+  value: string;
+  foot: string;
+  tone?: 'navy' | 'red' | 'grey';
 }) {
   return (
-    <Card tone={tone} style={{ padding: '18px 22px 20px' }}>
-      <div className="stack" style={{ gap: 5 }}>
-        <SectionLabel tone={labelTone}>{label}</SectionLabel>
-        {children}
-        <div
-          className="num"
-          style={{ fontSize: 13.5, color: footTone ?? 'var(--grey-body)' }}
-        >
-          {foot}
-        </div>
+    <div className="stack" style={{ gap: 2, minWidth: 0 }}>
+      <SectionLabel tone={tone === 'red' ? 'red' : tone === 'grey' ? 'grey' : 'navy'}>
+        {label}
+      </SectionLabel>
+      <div
+        className="num"
+        style={{
+          fontSize: 22,
+          fontWeight: 600,
+          lineHeight: 1.1,
+          color: tone === 'red' ? 'var(--red)' : tone === 'grey' ? 'var(--grey-body)' : 'var(--navy)',
+        }}
+      >
+        {value}
       </div>
-    </Card>
+      <div style={{ fontSize: 12, lineHeight: 1.45, color: 'var(--grey-body)' }}>{foot}</div>
+    </div>
   );
+}
+
+/**
+ * Background tint for a month column. `isOpen` is passed in rather than read
+ * off the status because a month with a score reads as 'scored' whether or not
+ * it has locked — see ScorecardSubject.openMonthIndex.
+ */
+function columnTint(status: MonthStatus, isOpen: boolean): string | undefined {
+  if (isOpen || status === 'open') return 'var(--tint-blue)';
+  if (status === 'not-applicable') return 'var(--grey-surface)';
+  return undefined;
 }
 
 export function Scorecard({
   subject,
-  contextNotes = [],
-  lockedMonths = [],
+  recordMonths = [],
   own = false,
   isManager = false,
 }: {
   subject: ScorecardSubject;
-  /** The context notes a manager wrote on outlier months — read-only for everyone. */
-  contextNotes?: ContextNote[];
-  /** One row per locked month, for the acknowledge/query section. */
-  lockedMonths?: LockedMonthRow[];
+  /** One row per month with a score on record, for the acknowledge/query section. */
+  recordMonths?: RecordMonthRow[];
   /** Viewing your own record — shows the Acknowledge action and "raise a query". */
   own?: boolean;
   /** Viewing this person's own manager's record — shows "respond" on open queries. */
@@ -77,6 +92,14 @@ export function Scorecard({
   const sd = consistency(subject.points);
   const delta = trend(subject.points);
   const h = halves(subject.points);
+  const reviewsHref = own ? '/reviews' : `/reviews/${subject.id}`;
+  const anyNotes = subject.matrix.some((row) => row.notes.some(Boolean));
+  // Months that closed empty, as against months that simply have not happened
+  // yet. Early in a fiscal year almost all the shortfall is the latter, and
+  // calling that "not logged" made a healthy record read as a failing one.
+  const missedCount =
+    subject.eligibleMonths - subject.monthsLogged - subject.monthsToCome;
+  const isOpenColumn = (i: number) => subject.openMonthIndex === i + 1;
 
   return (
     <>
@@ -92,43 +115,66 @@ export function Scorecard({
 
       <div
         style={{
-          padding: suppressed ? '24px 36px 30px' : '24px 36px 34px',
+          padding: '24px 36px 34px',
           display: 'flex',
           flexDirection: 'column',
-          gap: 20,
+          gap: 18,
         }}
       >
         {suppressed ? (
           <div
-            className="callout callout--alert"
+            className={missedCount > 0 ? 'callout callout--alert' : 'callout callout--info'}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: 26,
               borderLeftWidth: 4,
-              padding: '20px 24px',
+              padding: '18px 22px',
             }}
           >
             <div className="stack" style={{ flex: 1, minWidth: 0, gap: 5 }}>
-              <div style={{ fontSize: 19, fontWeight: 700, color: 'var(--red)' }}>
-                This record covers {subject.monthsLogged} of {subject.eligibleMonths} months
+              <div
+                style={{
+                  fontSize: 18,
+                  fontWeight: 700,
+                  color: missedCount > 0 ? 'var(--red)' : 'var(--navy)',
+                }}
+              >
+                This record covers {subject.monthsLogged} of {subject.eligibleMonths} eligible
+                month{subject.eligibleMonths === 1 ? '' : 's'}
               </div>
-              <div style={{ fontSize: 14.5, lineHeight: 1.55, color: 'var(--grey-body)' }}>
-                {subject.eligibleMonths - subject.monthsLogged} eligible month
-                {subject.eligibleMonths - subject.monthsLogged === 1 ? '' : 's'} were never
-                logged. The average below is calculated on what exists, not on the year — it
-                is not a basis for an annual rating, and Reviews will refuse the submission
-                until coverage reaches {partialThresholdMonths(subject.eligibleMonths)} months
-                or HR approves an exception.
+              <div style={{ fontSize: 14, lineHeight: 1.55, color: 'var(--grey-body)' }}>
+                {missedCount > 0 ? (
+                  <>
+                    {missedCount} eligible month{missedCount === 1 ? '' : 's'}{' '}
+                    {missedCount === 1 ? 'closed' : 'closed'} with nothing logged
+                    {subject.monthsToCome > 0
+                      ? `, and ${subject.monthsToCome} more ${subject.monthsToCome === 1 ? 'is' : 'are'} still to come`
+                      : ''}
+                    .{' '}
+                  </>
+                ) : (
+                  <>
+                    Nothing has been missed — {subject.monthsToCome} of this person&rsquo;s{' '}
+                    {subject.eligibleMonths} eligible months {subject.monthsToCome === 1 ? 'is' : 'are'}{' '}
+                    simply still to come.{' '}
+                  </>
+                )}
+                Every figure here is calculated on what exists, not on the year, so it is not a
+                basis for an annual rating until coverage reaches{' '}
+                {partialThresholdMonths(subject.eligibleMonths)} months or HR approves an exception.
+                The matrix below shows every month on record.
               </div>
             </div>
-            <button
-              type="button"
-              className="btn btn--destructive"
-              style={{ flex: 'none', fontSize: 14.5 }}
-            >
-              Request back-entry
-            </button>
+            {missedCount > 0 ? (
+              <button
+                type="button"
+                className="btn btn--destructive"
+                style={{ flex: 'none', fontSize: 14.5 }}
+              >
+                Request back-entry
+              </button>
+            ) : null}
           </div>
         ) : null}
 
@@ -137,432 +183,300 @@ export function Scorecard({
             <div style={{ fontSize: 28, fontWeight: 600, color: 'var(--navy)', lineHeight: 1.1 }}>
               {subject.name}
             </div>
-            <div style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
-              {subject.identity}
-            </div>
+            <div style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>{subject.identity}</div>
           </div>
-          {suppressed ? null : (
-            <div className="row" style={{ gap: 10, flex: 'none' }}>
-              <button type="button" className="btn btn--secondary" style={{ fontSize: 14.5, padding: '9px 18px' }}>
-                Compare to team
-              </button>
-              <Link
-                href={`/reviews/${subject.id}`}
-                className="btn btn--primary"
-                style={{ fontSize: 14.5, padding: '10px 20px', textDecoration: 'none' }}
-              >
-                Open in Reviews
-              </Link>
-            </div>
-          )}
+          <div className="row" style={{ gap: 10, flex: 'none' }}>
+            <button
+              type="button"
+              className="btn btn--secondary"
+              style={{ fontSize: 14.5, padding: '9px 18px' }}
+            >
+              Compare to team
+            </button>
+            <Link
+              href={reviewsHref}
+              className="btn btn--primary"
+              style={{ fontSize: 14.5, padding: '10px 20px', textDecoration: 'none' }}
+            >
+              {own ? 'What this means' : 'Open in Reviews'}
+            </Link>
+          </div>
         </div>
 
-        <Card
-          tone={suppressed ? 'red' : 'green'}
-          style={{
-            padding: '22px 26px 24px',
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr) 300px',
-            gap: 36,
-            alignItems: 'start',
-          }}
-        >
-          <div className="stack" style={{ gap: 16 }}>
-            <SectionLabel tone={suppressed ? 'red' : 'green'}>
-              {suppressed
-                ? 'Monthly weighted score · six months missing'
-                : 'Monthly weighted score · April to March'}
-            </SectionLabel>
-            <div style={{ paddingRight: 44 }}>
-              <YearStrip
-                size="large"
-                points={subject.points}
-                label={`${subject.name}, ${FY_LABEL}`}
+        {/* Context band — the shape of the year and the four derived figures.
+            Kept small on purpose: it frames the matrix, it is not the content. */}
+        <Card style={{ padding: '16px 22px 18px' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) auto',
+              gap: 28,
+              alignItems: 'center',
+            }}
+          >
+            <div className="stack" style={{ gap: 8, minWidth: 0 }}>
+              <SectionLabel tone="grey">Weighted score by month</SectionLabel>
+              <YearStrip size="medium" points={subject.points} label={`${subject.name}, ${FY_LABEL}`} />
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, minmax(96px, auto))',
+                gap: 24,
+                borderLeft: '1px solid var(--grey-surface)',
+                paddingLeft: 26,
+              }}
+            >
+              <ContextFigure
+                label="Year average"
+                tone={suppressed ? 'grey' : 'navy'}
+                value={subject.yearAverage.toFixed(1)}
+                foot={
+                  suppressed
+                    ? `Mean of ${subject.monthsLogged} — indicative`
+                    : `Mean of ${subject.monthsLogged} months`
+                }
+              />
+              <ContextFigure
+                label="Consistency"
+                tone={suppressed ? 'grey' : 'navy'}
+                value={consistencyLabel(sd, subject.monthsLogged)}
+                foot={
+                  suppressed || sd === null
+                    ? 'Needs 6 or more months'
+                    : `SD ${sd.toFixed(1)}`
+                }
+              />
+              <ContextFigure
+                label="Trend"
+                tone={suppressed ? 'grey' : 'navy'}
+                value={suppressed ? '—' : trendLabel(delta)}
+                foot={
+                  suppressed || delta === null || h === null
+                    ? 'No comparable halves'
+                    : `${h.first.toFixed(1)} → ${h.second.toFixed(1)} · ${signed(delta)}`
+                }
+              />
+              <ContextFigure
+                label="Coverage"
+                tone={suppressed ? 'red' : 'navy'}
+                value={`${subject.monthsLogged} of ${subject.eligibleMonths}`}
+                foot={suppressed ? 'Insufficient' : 'Complete to date'}
               />
             </div>
           </div>
+        </Card>
 
-          <div
-            className="stack"
+        {/* The substance. */}
+        <Card style={{ padding: '20px 24px 22px' }}>
+          <div className="spread" style={{ alignItems: 'baseline', marginBottom: 4, gap: 24 }}>
+            <SectionLabel>Achievement by key result area</SectionLabel>
+            <Link href={reviewsHref} style={{ fontSize: 13, fontWeight: 700, flex: 'none' }}>
+              What this means for the rating →
+            </Link>
+          </div>
+          <p
             style={{
-              gap: 12,
-              borderLeft: '1px solid var(--grey-surface)',
-              paddingLeft: 28,
+              margin: '0 0 14px',
+              fontSize: 13,
+              lineHeight: 1.55,
+              color: 'var(--grey-body)',
+              maxWidth: '92ch',
             }}
           >
-            {subject.record ? (
+            Achievement against each KRA&rsquo;s target, month by month. Numerals are coloured only
+            for exceptions — <span style={{ color: 'var(--red)', fontWeight: 700 }}>below 70%</span>{' '}
+            and <span style={{ color: 'var(--green)', fontWeight: 700 }}>above 120%</span>, the two
+            bands that oblige the manager to write a context note.
+            {anyNotes ? (
               <>
-                <SectionLabel tone="navy">Record status</SectionLabel>
-                <div className="spread" style={{ fontSize: 14 }}>
-                  <span>Months locked</span>
-                  <span className="num" style={{ fontWeight: 700, color: 'var(--navy)' }}>
-                    {subject.record.monthsLocked}
-                  </span>
-                </div>
-                <div className="spread" style={{ fontSize: 14 }}>
-                  <span>{subject.record.openMonthLabel}</span>
-                  <Chip tone="cyan" tight>
-                    {subject.record.currentMonthState}
-                  </Chip>
-                </div>
-                <div className="spread" style={{ fontSize: 14 }}>
-                  <span>Last submitted</span>
-                  <span className="num" style={{ color: 'var(--navy)' }}>
-                    {subject.record.lastSubmitted}
-                  </span>
-                </div>
-                <div style={{ height: 1, background: 'var(--grey-surface)', margin: '2px 0' }} />
-                <div className="spread" style={{ fontSize: 14 }}>
-                  <span>FY 2024–25 rating</span>
-                  <span style={{ fontWeight: 700, color: 'var(--navy)' }}>
-                    {subject.record.priorRating}
-                  </span>
-                </div>
+                {' '}
+                A <strong style={{ color: 'var(--navy)' }}>•</strong> marks a cell that has one —
+                the notes themselves are in{' '}
+                <Link href={reviewsHref} style={{ fontWeight: 700 }}>
+                  Reviews
+                </Link>
+                .
               </>
-            ) : (
+            ) : null}
+          </p>
+
+          {subject.matrix.length === 0 ? (
+            <div style={{ fontSize: 14, color: 'var(--grey-body)' }}>
+              No KPI set has been published for this fiscal year, so there is nothing to break the
+              score down against.
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table" style={{ fontSize: 14 }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: '9px 12px', minWidth: 210 }}>Key result area</th>
+                    <th className="is-num" style={{ padding: '9px 8px' }}>
+                      Wt
+                    </th>
+                    <th className="is-num" style={{ padding: '9px 8px' }}>
+                      Target
+                    </th>
+                    {MONTH_HEADS.map((m, i) => (
+                      <th
+                        key={m}
+                        style={{
+                          textAlign: 'center',
+                          padding: '9px 4px',
+                          minWidth: 40,
+                          color:
+                            subject.points[i]?.status === 'scored' ||
+                            subject.points[i]?.status === 'open'
+                              ? 'var(--navy)'
+                              : 'var(--grey-body)',
+                          background: columnTint(subject.points[i]?.status ?? 'future', isOpenColumn(i)),
+                        }}
+                      >
+                        {m}
+                      </th>
+                    ))}
+                    <th className="is-num" style={{ padding: '9px 12px' }}>
+                      Avg
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {subject.matrix.map((row) => (
+                    <tr key={row.kra}>
+                      <td style={{ padding: '11px 12px' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--navy)' }}>{row.kra}</div>
+                        <div style={{ fontSize: 12, color: 'var(--grey-body)' }}>
+                          {row.basis}
+                          {row.lowerIsBetter ? ' · lower is better' : ''}
+                        </div>
+                      </td>
+                      <td className="is-num" style={{ padding: '11px 8px' }}>
+                        {row.weight}%
+                      </td>
+                      <td className="is-num" style={{ padding: '11px 8px', color: 'var(--navy)' }}>
+                        {row.target}
+                        {row.unit === '%' ? '%' : ''}
+                      </td>
+                      {row.months.map((value, i) => {
+                        const status = subject.points[i]?.status ?? 'future';
+                        return (
+                          <td
+                            key={MONTH_HEADS[i]}
+                            className="num"
+                            style={{
+                              padding: '11px 4px',
+                              textAlign: 'center',
+                              background: columnTint(status, isOpenColumn(i)),
+                              color:
+                                value === null ? 'var(--grey-line)' : matrixCellColour(value),
+                              fontWeight:
+                                value !== null && (value < 70 || value > 120) ? 700 : 400,
+                            }}
+                            title={
+                              row.notes[i]
+                                ? `${row.kra}, ${FY_MONTHS[i]} — a context note is on record; read it in Reviews`
+                                : undefined
+                            }
+                          >
+                            {value === null ? (status === 'not-applicable' ? '' : '—') : value.toFixed(0)}
+                            {row.notes[i] ? (
+                              <span style={{ color: 'var(--navy)', fontWeight: 700 }}>•</span>
+                            ) : null}
+                          </td>
+                        );
+                      })}
+                      <td
+                        className="is-num"
+                        style={{
+                          padding: '11px 12px',
+                          fontWeight: 700,
+                          color: row.average === null ? 'var(--grey-line)' : 'var(--navy)',
+                        }}
+                      >
+                        {row.average === null ? '—' : row.average.toFixed(1)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: 'var(--panel)', borderTop: '2px solid var(--navy)' }}>
+                    <td style={{ padding: 12 }} colSpan={3}>
+                      <span style={{ fontWeight: 700, color: 'var(--navy)' }}>
+                        Weighted monthly score
+                      </span>
+                    </td>
+                    {subject.weightedByMonth.map((value, i) => {
+                      const status = subject.points[i]?.status ?? 'future';
+                      return (
+                        <td
+                          key={MONTH_HEADS[i]}
+                          className="num"
+                          style={{
+                            padding: '12px 4px',
+                            textAlign: 'center',
+                            fontWeight: 700,
+                            background: columnTint(status, isOpenColumn(i)),
+                            color: value === null ? 'var(--grey-line)' : 'var(--navy)',
+                          }}
+                        >
+                          {value === null
+                            ? status === 'not-applicable'
+                              ? ''
+                              : '—'
+                            : value.toFixed(0)}
+                        </td>
+                      );
+                    })}
+                    <td
+                      className="is-num"
+                      style={{ padding: 12, fontWeight: 700, color: 'var(--navy)', fontSize: 16 }}
+                    >
+                      {subject.yearAverage.toFixed(1)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+
+          <div
+            style={{
+              marginTop: 12,
+              fontSize: 12.5,
+              lineHeight: 1.55,
+              color: 'var(--grey-body)',
+            }}
+          >
+            A dash is a month with nothing recorded against that KRA. The blue column is the
+            month still open for entry, so it can still change; a grey column is a month before
+            this person joined the programme, where there was never anything to log.
+            {subject.missingMonths ? (
               <>
-                <SectionLabel tone="navy">Missing months</SectionLabel>
-                <div
-                  style={{
-                    fontSize: 14.5,
-                    lineHeight: 1.6,
-                    color: 'var(--navy)',
-                    fontWeight: 700,
-                  }}
-                >
-                  {subject.missingMonths}
-                </div>
-                <div style={{ fontSize: 13.5, lineHeight: 1.55 }}>{subject.missingNote}</div>
+                {' '}
+                Closed with nothing logged:{' '}
+                <strong style={{ color: 'var(--navy)' }}>{subject.missingMonths}</strong>.
               </>
-            )}
+            ) : null}
           </div>
         </Card>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr 1fr 1.55fr',
-            gap: 18,
-          }}
-        >
-          <StatShell
-            label="Year average"
-            labelTone={suppressed ? 'grey' : 'navy'}
-            tone={suppressed ? 'navy' : 'navy'}
-            foot={
-              suppressed
-                ? `Mean of ${subject.monthsLogged} months — treat as a sample, not a year`
-                : `Mean of ${subject.monthsLogged} logged months`
-            }
-            footTone={suppressed ? 'var(--amber)' : undefined}
-          >
-            <div
-              className="num"
-              style={{
-                fontSize: 36,
-                fontWeight: 600,
-                color: suppressed ? 'var(--grey-body)' : 'var(--navy)',
-                lineHeight: 1.05,
-              }}
-            >
-              {subject.yearAverage.toFixed(1)}
-              {suppressed ? (
-                <span
-                  style={{
-                    fontSize: 16,
-                    color: 'var(--amber)',
-                    fontWeight: 700,
-                    marginLeft: 8,
-                  }}
-                >
-                  indicative
-                </span>
-              ) : null}
-            </div>
-          </StatShell>
-
-          <StatShell
-            label="Consistency"
-            labelTone={suppressed ? 'grey' : 'navy'}
-            tone="navy"
-            foot={
-              suppressed
-                ? 'Suppressed — needs 6 or more months'
-                : `SD ${sd?.toFixed(1) ?? '—'} · Steady under 8, Variable 8–15, Erratic above`
-            }
-          >
-            <div
-              style={{
-                fontSize: 36,
-                fontWeight: 600,
-                color: suppressed ? 'var(--grey-line)' : 'var(--navy)',
-                lineHeight: 1.05,
-              }}
-            >
-              {consistencyLabel(sd, subject.monthsLogged)}
-            </div>
-          </StatShell>
-
-          <StatShell
-            label="Trend"
-            labelTone={suppressed ? 'grey' : 'navy'}
-            tone="navy"
-            foot={
-              suppressed || delta === null || h === null
-                ? 'Suppressed — no comparable halves'
-                : `H1 ${h.first.toFixed(1)} → H2 ${h.second.toFixed(1)} · ${signed(delta)}`
-            }
-          >
-            <div
-              style={{
-                fontSize: 36,
-                fontWeight: 600,
-                color: suppressed ? 'var(--grey-line)' : 'var(--navy)',
-                lineHeight: 1.05,
-              }}
-            >
-              {suppressed ? '—' : trendLabel(delta)}
-            </div>
-          </StatShell>
-
-          <Card
-            tone={suppressed ? 'red' : 'green'}
-            style={{ padding: '18px 22px 20px' }}
-          >
-            <div className="stack" style={{ gap: 10 }}>
-              <div className="spread" style={{ alignItems: 'baseline' }}>
-                <SectionLabel tone={suppressed ? 'red' : 'green'}>Coverage</SectionLabel>
-                <Chip tone={suppressed ? 'red' : 'green'} tight>
-                  {suppressed ? 'Insufficient' : 'Complete to date'}
-                </Chip>
-              </div>
-              <div
-                className="num"
-                style={{
-                  fontSize: 36,
-                  fontWeight: 600,
-                  color: suppressed ? 'var(--red)' : 'var(--navy)',
-                  lineHeight: 1.05,
-                }}
-              >
-                {subject.monthsLogged}{' '}
-                <span style={{ fontSize: 20, fontWeight: 400, color: 'var(--grey-body)' }}>
-                  of {subject.eligibleMonths} months
-                </span>
-              </div>
-              <CoverageBar points={subject.points} />
-              <div style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
-                {suppressed
-                  ? 'Filled navy is logged, dashed red is a month that closed empty.'
-                  : 'Every eligible month is logged.'}
-              </div>
-            </div>
-          </Card>
-        </div>
-
-        {subject.matrix && subject.weightedByMonth ? (
-          <Card style={{ padding: '20px 24px 22px' }}>
-            <div className="spread" style={{ alignItems: 'baseline', marginBottom: 16 }}>
-              <SectionLabel>Achievement by key result area</SectionLabel>
-              <div style={{ fontSize: 13, color: 'var(--grey-body)' }}>
-                Numerals are coloured only for exceptions —{' '}
-                <span style={{ color: 'var(--red)', fontWeight: 700 }}>below 70%</span> and{' '}
-                <span style={{ color: 'var(--green)', fontWeight: 700 }}>above 120%</span>,
-                the two bands that require a context note
-              </div>
-            </div>
-
-            <table className="data-table" style={{ fontSize: 14 }}>
-              <thead>
-                <tr>
-                  <th style={{ padding: '9px 12px' }}>Key result area</th>
-                  <th className="is-num" style={{ padding: '9px 8px' }}>
-                    Wt
-                  </th>
-                  {MONTH_HEADS.map((m, i) => (
-                    <th
-                      key={m}
-                      style={{
-                        textAlign: 'center',
-                        padding: '9px 4px',
-                        color: i === 11 ? 'var(--grey-body)' : 'var(--navy)',
-                        background: i === 10 ? 'var(--tint-blue)' : undefined,
-                      }}
-                    >
-                      {m}
-                    </th>
-                  ))}
-                  <th className="is-num" style={{ padding: '9px 12px' }}>
-                    Avg
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {subject.matrix.map((row) => (
-                  <tr key={row.kra}>
-                    <td style={{ padding: '11px 12px' }}>
-                      <div style={{ fontWeight: 700, color: 'var(--navy)' }}>{row.kra}</div>
-                      <div style={{ fontSize: 12, color: 'var(--grey-body)' }}>{row.unit}</div>
-                    </td>
-                    <td className="is-num" style={{ padding: '11px 8px' }}>
-                      {row.weight}%
-                    </td>
-                    {row.closed.map((value, i) => (
-                      <td
-                        key={MONTH_HEADS[i]}
-                        className="num"
-                        style={{
-                          padding: '11px 4px',
-                          textAlign: 'center',
-                          color: value === null ? 'var(--grey-line)' : matrixCellColour(value),
-                          fontWeight: value !== null && (value < 70 || value > 120) ? 700 : 400,
-                        }}
-                      >
-                        {value === null ? '—' : value}
-                      </td>
-                    ))}
-                    {/* February is open; March is not yet reached. */}
-                    <td
-                      style={{
-                        padding: '11px 4px',
-                        textAlign: 'center',
-                        color: 'var(--grey-line)',
-                        background: '#f7fbfe',
-                      }}
-                    >
-                      —
-                    </td>
-                    <td
-                      style={{ padding: '11px 4px', textAlign: 'center', color: 'var(--grey-line)' }}
-                    >
-                      —
-                    </td>
-                    <td
-                      className="is-num"
-                      style={{
-                        padding: '11px 12px',
-                        fontWeight: 700,
-                        color: row.average === null ? 'var(--grey-line)' : 'var(--navy)',
-                      }}
-                    >
-                      {row.average === null ? '—' : row.average.toFixed(1)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr style={{ background: 'var(--panel)', borderTop: '2px solid var(--navy)' }}>
-                  <td style={{ padding: 12 }} colSpan={2}>
-                    <span style={{ fontWeight: 700, color: 'var(--navy)' }}>
-                      Weighted monthly score
-                    </span>
-                  </td>
-                  {subject.weightedByMonth.map((value, i) => (
-                    <td
-                      key={MONTH_HEADS[i]}
-                      className="num"
-                      style={{
-                        padding: '12px 4px',
-                        textAlign: 'center',
-                        fontWeight: 700,
-                        color: value === null ? 'var(--grey-line)' : 'var(--navy)',
-                      }}
-                    >
-                      {value === null ? '—' : value}
-                    </td>
-                  ))}
-                  <td
-                    style={{
-                      padding: '12px 4px',
-                      textAlign: 'center',
-                      color: 'var(--grey-line)',
-                      background: '#f7fbfe',
-                    }}
-                  >
-                    —
-                  </td>
-                  <td
-                    style={{ padding: '12px 4px', textAlign: 'center', color: 'var(--grey-line)' }}
-                  >
-                    —
-                  </td>
-                  <td
-                    className="is-num"
-                    style={{
-                      padding: 12,
-                      fontWeight: 700,
-                      color: 'var(--navy)',
-                      fontSize: 16,
-                    }}
-                  >
-                    {subject.yearAverage.toFixed(1)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </Card>
-        ) : null}
-
-        {suppressed ? (
-          <div
-            className="row"
-            style={{
-              gap: 26,
-              padding: '16px 20px',
-              background: 'var(--grey-surface)',
-              borderRadius: 'var(--radius)',
-              fontSize: 14,
-              lineHeight: 1.55,
-              flexWrap: 'wrap',
-            }}
-          >
-            <span style={{ fontWeight: 700, color: 'var(--navy)', flex: 'none' }}>
-              Coverage bands
-            </span>
-            {COVERAGE_BANDS.map((b) => (
-              <span key={b.band}>
-                <strong style={{ color: `var(--${b.tone === 'navy' ? 'navy' : b.tone})` }}>
-                  {b.range}
-                </strong>{' '}
-                {b.label}
-              </span>
-            ))}
-          </div>
-        ) : null}
-
-        {contextNotes.length > 0 ? (
-          <Card tone="navy" style={{ padding: '20px 24px 22px' }}>
-            <SectionLabel tone="navy">Context notes from the year</SectionLabel>
-            <div className="stack" style={{ gap: 14, marginTop: 14 }}>
-              {contextNotes.map((note, i) => (
-                <div key={note.when} className="stack" style={{ gap: 14 }}>
-                  {i > 0 ? <div style={{ height: 1, background: 'var(--grey-surface)' }} /> : null}
-                  <div className="stack" style={{ gap: 3 }}>
-                    <div
-                      className="num"
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 700,
-                        color: note.tone === 'green' ? 'var(--green)' : 'var(--red)',
-                      }}
-                    >
-                      {note.when}
-                    </div>
-                    <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>{note.body}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        ) : null}
-
-        {lockedMonths.length > 0 ? (
+        {recordMonths.length > 0 ? (
           <Card style={{ padding: '20px 24px 22px' }}>
             <SectionLabel>Acknowledgements &amp; queries</SectionLabel>
-            <p style={{ margin: '6px 0 14px', fontSize: 13.5, color: 'var(--grey-body)', maxWidth: '80ch' }}>
+            <p
+              style={{
+                margin: '6px 0 14px',
+                fontSize: 13.5,
+                lineHeight: 1.55,
+                color: 'var(--grey-body)',
+                maxWidth: '86ch',
+              }}
+            >
               {own
-                ? 'Acknowledging confirms you have seen a locked month. A query on a specific month goes to your manager, not HR.'
-                : 'What this person has confirmed seeing, and any questions raised against a specific month.'}
+                ? 'Marking a month as seen is optional and blocks nothing — the month counts and locks either way, and nobody will chase you for it. If you disagree with a month, raise a query on it: it goes to your manager, and both the question and the reply stay against that month.'
+                : 'Which months this person has confirmed seeing, and any question raised against a specific month. Acknowledging is optional and blocks nothing — an unacknowledged month still counts and still locks.'}
             </p>
             <table className="data-table" style={{ fontSize: 14 }}>
               <thead>
@@ -571,18 +485,23 @@ export function Scorecard({
                   <th className="is-num" style={{ padding: '9px 10px', width: 90 }}>
                     Score
                   </th>
-                  <th style={{ padding: '9px 12px', width: 170 }}>Acknowledged</th>
+                  <th style={{ padding: '9px 12px', width: 180 }}>Seen</th>
                   <th style={{ padding: '9px 12px' }}>Queries</th>
                 </tr>
               </thead>
               <tbody>
-                {lockedMonths.map((month) => (
+                {recordMonths.map((month) => (
                   <tr key={month.cycleId}>
                     <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--navy)' }}>
                       {month.label}
+                      {month.state === 'OPEN' ? (
+                        <div style={{ fontSize: 12, fontWeight: 400, color: 'var(--grey-body)' }}>
+                          still open
+                        </div>
+                      ) : null}
                     </td>
                     <td className="is-num" style={{ padding: '10px 10px' }}>
-                      {month.weightedScore === null ? '—' : month.weightedScore.toFixed(1)}
+                      {month.weightedScore.toFixed(1)}
                     </td>
                     <td style={{ padding: '10px 12px' }}>
                       {month.acknowledgedAtLabel ? (
@@ -593,7 +512,7 @@ export function Scorecard({
                         <AcknowledgeButton cycleId={month.cycleId} />
                       ) : (
                         <Chip tone="grey" tight>
-                          Not yet
+                          Not marked
                         </Chip>
                       )}
                     </td>
@@ -611,7 +530,10 @@ export function Scorecard({
                           {q.state === 'ANSWERED' ? (
                             <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>
                               {q.response}{' '}
-                              <span className="num" style={{ color: 'var(--grey-body)', fontSize: 12.5 }}>
+                              <span
+                                className="num"
+                                style={{ color: 'var(--grey-body)', fontSize: 12.5 }}
+                              >
                                 · {q.respondedAtLabel}
                               </span>
                             </div>

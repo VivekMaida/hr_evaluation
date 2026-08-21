@@ -9,7 +9,20 @@ import { prisma } from '@/lib/db';
 
 export type ScorecardActionState = { error: string | null; ok: boolean };
 
-/** Self-only — an employee acknowledging their own locked month. */
+/**
+ * Self-only — an employee marking their own month as seen.
+ *
+ * Acknowledging is a courtesy marker, not a gate: it is never required, it
+ * blocks nothing, and the month locks and counts toward the year whether or
+ * not it is ever ticked. Nothing chases the employee for it.
+ *
+ * It is allowed on the open month as well as a locked one — all that is
+ * required is a score to have seen. Restricting it to LOCKED made it
+ * unreachable for a month still in progress, which is exactly when someone
+ * would first look at their figure. There is deliberately no way to un-see a
+ * month: disagreement goes through raiseQuery below, which keeps the question
+ * and the manager's reply against that month.
+ */
 export async function acknowledgeMonth(
   _prev: ScorecardActionState,
   formData: FormData,
@@ -20,14 +33,25 @@ export async function acknowledgeMonth(
   const cycleId = String(formData.get('cycleId') ?? '');
   if (!cycleId) return { error: 'Bad request.', ok: false };
 
+  const employeeId = session.user.employeeId;
+
   const rawCycle = await prisma.cycle.findUnique({ where: { id: cycleId } });
   if (!rawCycle) return { error: 'No such cycle.', ok: false };
   const cycle = deriveCycle(rawCycle, now());
-  if (cycle.state !== 'LOCKED') {
-    return { error: 'Only a locked month can be acknowledged.', ok: false };
+  if (cycle.state === 'FUTURE') {
+    return { error: 'That month has not started yet.', ok: false };
   }
 
-  const employeeId = session.user.employeeId;
+  // There has to be something to have seen. Without this an employee could
+  // acknowledge a month that was never scored, which would read on the
+  // manager's view as agreement with a figure that does not exist.
+  const submission = await prisma.submission.findFirst({
+    where: { employeeId, cycleId, state: 'SUBMITTED' },
+    select: { id: true },
+  });
+  if (!submission) {
+    return { error: 'That month has no score on record yet.', ok: false };
+  }
 
   await prisma.$transaction([
     prisma.acknowledgement.upsert({
@@ -49,6 +73,8 @@ export async function acknowledgeMonth(
   revalidatePath('/');
   revalidatePath('/scorecard');
   revalidatePath(`/scorecard/${employeeId}`);
+  revalidatePath('/reviews');
+  revalidatePath(`/reviews/${employeeId}`);
   revalidatePath(`/profile/${employeeId}`);
   return { error: null, ok: true };
 }
@@ -101,6 +127,8 @@ export async function raiseQuery(
 
   revalidatePath('/scorecard');
   revalidatePath(`/scorecard/${employeeId}`);
+  revalidatePath('/reviews');
+  revalidatePath(`/reviews/${employeeId}`);
   return { error: null, ok: true };
 }
 
@@ -157,5 +185,7 @@ export async function respondToQuery(
   ]);
 
   revalidatePath(`/scorecard/${query.employeeId}`);
+  revalidatePath(`/reviews/${query.employeeId}`);
+  revalidatePath('/reviews');
   return { error: null, ok: true };
 }

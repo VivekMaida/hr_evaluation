@@ -10,6 +10,7 @@ import {
   priorFiscalYear,
   yearAverage as computeYearAverage,
 } from './employee-year';
+import { getNotedEntryKeys } from './context-notes';
 import { getKpiIdsByLineage, getKpiSetForCycle } from './kpi';
 import type { MonthPoint } from './types';
 
@@ -91,11 +92,25 @@ export function matrixCellColour(value: number): string {
 
 export type KraMonthRow = {
   kra: string;
-  unit: string;
+  /** How the KRA is measured, in words — the subtitle under its name. */
+  basis: string;
+  /** "%", "count", "days" … Printed against the target, not on its own. */
+  unit: string | null;
   weight: number;
-  /** Achievement percentage per locked month, Apr → Jan, in order. */
-  closed: (number | null)[];
-  /** null when none of the locked months has an actual on record for this KPI. */
+  /** The annual target this KRA is measured against. */
+  target: number;
+  /** TAT/error-count KRAs invert the maths — target ÷ actual. */
+  lowerIsBetter: boolean;
+  /**
+   * Twelve slots, April → March, aligned with `points`. null means this KRA
+   * has no actual on record for that month — which is a different thing from
+   * the month itself being future or before the person started; read the
+   * month's own status off `points[i]` for that.
+   */
+  months: (number | null)[];
+  /** Twelve slots — the manager wrote a context note on that month's entry. */
+  notes: boolean[];
+  /** null when no month on record has an actual for this KPI. */
   average: number | null;
 };
 
@@ -107,9 +122,21 @@ export type ScorecardSubject = {
   monthsLogged: number;
   /** How many of the twelve months this person is actually eligible for — see eligibleFromMonthIndex(). */
   eligibleMonths: number;
-  /** Present only when the record is deep enough to publish a matrix. */
-  matrix?: KraMonthRow[];
-  weightedByMonth?: (number | null)[];
+  /**
+   * One row per KRA, always — the matrix is the substance of the Scorecard and
+   * is published from the first month on record, not held back until coverage
+   * is deep enough. It is empty only when the employee has no KPI set at all.
+   */
+  matrix: KraMonthRow[];
+  /** Twelve slots, April → March, aligned with `points` and each row's `months`. */
+  weightedByMonth: (number | null)[];
+  /**
+   * 1-based month index of the cycle still open for entry, if any. Not
+   * derivable from `points`: a month that already has a score reads as
+   * 'scored' there whether or not it has locked, so the matrix needs telling
+   * which column can still change.
+   */
+  openMonthIndex?: number;
   yearAverage: number;
   record?: {
     monthsLocked: number;
@@ -118,8 +145,19 @@ export type ScorecardSubject = {
     lastSubmitted: string;
     priorRating: string;
   };
+  /**
+   * Eligible months that have already closed with nothing logged — a real hole
+   * in the record. Undefined when there are none.
+   */
   missingMonths?: string;
   missingNote?: string;
+  /**
+   * Eligible months still ahead (open or future). Kept separate from
+   * `missingMonths` because "not logged yet" and "closed empty" are different
+   * facts, and conflating them made a healthy early-year record read as a
+   * failing one.
+   */
+  monthsToCome: number;
 };
 
 export type ScorecardData = {
@@ -196,60 +234,107 @@ export async function getScorecardData(
     monthsLogged: months,
     eligibleMonths,
     yearAverage: average,
+    matrix: [],
+    weightedByMonth: [],
+    monthsToCome: scores.filter(
+      (s) => s.monthIndex >= fromIndex && (s.state === 'FUTURE' || (s.state === 'OPEN' && s.weightedScore === null)),
+    ).length,
   };
 
-  if (coverageBand(months, eligibleMonths) === 'insufficient') {
-    const missing = scores
-      .filter((s) => s.monthIndex >= fromIndex && s.state !== 'FUTURE' && s.weightedScore === null)
-      .map((s) => s.label.split(' ')[0]);
-    subject.missingMonths = missing.length > 0 ? missing.join(' · ') : '—';
-    subject.missingNote =
-      'Coverage is too thin to publish a KRA matrix or a record status. The average above is calculated on what exists, not on the year.';
-    return { employee: base, subject };
-  }
+  // Every month that has a record to read — locked *and* the currently open
+  // one. The matrix is published from month one: withholding it until coverage
+  // was deep enough hid the only content that answers "which KRAs are strong,
+  // which are weak, which are moving", which is the point of the screen. Thin
+  // coverage is called out in the banner instead of blanking the grid.
+  const recordScores = scores.filter((s) => s.monthIndex >= fromIndex && s.state !== 'FUTURE');
+  const monthsLocked = scores.filter(
+    (s) => s.monthIndex >= fromIndex && s.state === 'LOCKED' && s.weightedScore !== null,
+  ).length;
 
-  const lockedScores = scores.filter((s) => s.monthIndex >= fromIndex && s.state === 'LOCKED');
-  const monthsLocked = lockedScores.filter((s) => s.weightedScore !== null).length;
+  const openScore = scores.find((s) => s.state === 'OPEN');
+  // Under the 'after-lock' policy the open month is withheld, so its entries
+  // must not reach the matrix either — masking the weighted score while
+  // leaving the per-KRA cells visible would leak exactly what it hides.
+  const readableScores = options.maskOpenCycleData
+    ? recordScores.filter((s) => s.state !== 'OPEN')
+    : recordScores;
 
-  // `cycle` was never read off these rows — the join was pure overhead. It
-  // also cannot filter on `cycle.state` any more: the stored column is only a
-  // snapshot, and locked-ness is derived from the clock. `lockedScores` above
-  // already carries the derived state, so scope the query by its cycle ids.
-  const lockedCycleIds = lockedScores.map((s) => s.cycleId);
-  const [entries, idsByLineage] = await Promise.all([
-    lockedCycleIds.length
-      ? prisma.monthlyEntry.findMany({ where: { employeeId, cycleId: { in: lockedCycleIds } } })
+  const readableCycleIds = readableScores.map((s) => s.cycleId);
+  const [entries, idsByLineage, notedKeys] = await Promise.all([
+    readableCycleIds.length
+      ? prisma.monthlyEntry.findMany({ where: { employeeId, cycleId: { in: readableCycleIds } } })
       : Promise.resolve([]),
     getKpiIdsByLineage(employeeId, FISCAL_YEAR),
+    getNotedEntryKeys(employeeId, FISCAL_YEAR),
   ]);
   const entriesByKpiAndCycle = new Map(entries.map((e) => [`${e.kpiId}:${e.cycleId}`, e]));
 
+  // monthIndex → cycleId, for the twelve-slot walk below. A month with no
+  // Cycle row, or one outside this person's eligible window, has no entry to
+  // find and reads as an empty cell.
+  const cycleIdByMonth = new Map(readableScores.map((s) => [s.monthIndex, s.cycleId]));
+
   subject.matrix = kpis.map((kpi) => {
-    // A locked month's entry was recorded against whichever version of this
-    // KRA was live that month — not necessarily `kpi`, the current one, if
-    // it's since been renamed or reweighted. Every id this lineage has ever
-    // used is tried; exactly one can match a given cycle, since versions'
-    // effective ranges never overlap.
+    // A month's entry was recorded against whichever version of this KRA was
+    // live that month — not necessarily `kpi`, the current one, if it has
+    // since been renamed or reweighted. Every id this lineage has ever used is
+    // tried; exactly one can match a given cycle, since versions' effective
+    // ranges never overlap.
     const lineageIds = idsByLineage.get(kpi.lineageId) ?? [kpi.id];
-    const closed = lockedScores.map((s) => {
-      const entry = lineageIds.map((id) => entriesByKpiAndCycle.get(`${id}:${s.cycleId}`)).find(Boolean);
-      return entry?.achievement === null || entry?.achievement === undefined
-        ? null
-        : Number(entry.achievement);
-    });
-    const present = closed.filter((v): v is number => v !== null);
+    const monthsRow: (number | null)[] = [];
+    const notesRow: boolean[] = [];
+
+    for (let monthIndex = 1; monthIndex <= 12; monthIndex += 1) {
+      const cycleId = cycleIdByMonth.get(monthIndex);
+      if (!cycleId) {
+        monthsRow.push(null);
+        notesRow.push(false);
+        continue;
+      }
+      const matchedId = lineageIds.find((id) => entriesByKpiAndCycle.has(`${id}:${cycleId}`));
+      const entry = matchedId ? entriesByKpiAndCycle.get(`${matchedId}:${cycleId}`) : undefined;
+      monthsRow.push(
+        entry?.achievement === null || entry?.achievement === undefined
+          ? null
+          : Number(entry.achievement),
+      );
+      notesRow.push(matchedId ? notedKeys.has(`${matchedId}:${cycleId}`) : false);
+    }
+
+    const present = monthsRow.filter((v): v is number => v !== null);
     const average = present.length === 0 ? null : present.reduce((a, b) => a + b, 0) / present.length;
     return {
       kra: kpi.name,
-      unit: kpi.unit ?? kpi.basis,
+      basis: kpi.basis,
+      unit: kpi.unit,
       weight: Number(kpi.weight),
-      closed,
+      target: Number(kpi.target),
+      lowerIsBetter: kpi.lowerIsBetter,
+      months: monthsRow,
+      notes: notesRow,
       average,
     };
   });
-  subject.weightedByMonth = lockedScores.map((s) => s.weightedScore);
 
-  const openScore = scores.find((s) => s.state === 'OPEN');
+  // Twelve slots, aligned with `points` and every matrix row.
+  const scoreByMonth = new Map(readableScores.map((s) => [s.monthIndex, s.weightedScore]));
+  subject.weightedByMonth = Array.from(
+    { length: 12 },
+    (_unused, i) => scoreByMonth.get(i + 1) ?? null,
+  );
+  if (openScore && !options.maskOpenCycleData) subject.openMonthIndex = openScore.monthIndex;
+
+  // Only months that have actually closed empty. A month still to come is not
+  // a gap, so it never lands here — see `monthsToCome`.
+  const missed = scores
+    .filter((s) => s.monthIndex >= fromIndex && s.state === 'LOCKED' && s.weightedScore === null)
+    .map((s) => s.label.split(' ')[0]);
+  if (missed.length > 0) {
+    subject.missingMonths = missed.join(' · ');
+    subject.missingNote =
+      'The average above is calculated on what exists, not on the year. The matrix below still shows every month on record.';
+  }
+
   const openMonthLabel = openScore?.label.split(' ')[0] ?? 'This month';
   const openEntries =
     options.maskOpenCycleData || !openScore

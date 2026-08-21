@@ -5,8 +5,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { Scorecard } from '@/components/scorecard/Scorecard';
 import { canAccessEmployee } from '@/lib/access';
 import { EMPLOYEE_RECORD_VISIBILITY, FISCAL_YEAR, FY_LABEL, FY_RANGE_LABEL } from '@/lib/constants';
-import { getContextNotes } from '@/lib/context-notes';
-import { getLockedMonthRows } from '@/lib/locked-months';
+import { getRecordMonthRows } from '@/lib/record-months';
 import { getScorecardData } from '@/lib/scorecard';
 
 export const metadata = { title: 'Scorecard · M3M Perform' };
@@ -26,10 +25,9 @@ export default async function ScorecardIndexPage() {
   if (isEmployee && EMPLOYEE_RECORD_VISIBILITY === 'hidden') redirect('/profile');
   const maskOpenCycleData = isEmployee && EMPLOYEE_RECORD_VISIBILITY === 'after-lock';
 
-  const [data, contextNotes, lockedMonths] = await Promise.all([
+  const [data, recordMonths] = await Promise.all([
     getScorecardData(employeeId, { maskOpenCycleData }),
-    getContextNotes(employeeId, FISCAL_YEAR),
-    getLockedMonthRows(employeeId, FISCAL_YEAR),
+    getRecordMonthRows(employeeId, FISCAL_YEAR),
   ]);
   if (!data) redirect('/login');
 
@@ -49,8 +47,7 @@ export default async function ScorecardIndexPage() {
   return (
     <Scorecard
       subject={data.subject}
-      contextNotes={contextNotes}
-      lockedMonths={lockedMonths}
+      recordMonths={recordMonths}
       own
     />
   );

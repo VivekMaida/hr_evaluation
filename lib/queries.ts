@@ -10,6 +10,9 @@ export type QueryItem = {
   id: string;
   cycleId: string;
   cycleLabel: string;
+  /** 1 = April … 12 = March. Sorting on cycleLabel would order "April" before
+   *  "August" alphabetically, which is not the order they happened in. */
+  monthIndex: number;
   question: string;
   askedAtLabel: string;
   state: 'OPEN' | 'ANSWERED';
@@ -32,6 +35,7 @@ export async function getQueriesForEmployee(employeeId: string): Promise<QueryIt
     id: q.id,
     cycleId: q.cycleId,
     cycleLabel: q.cycle.label,
+    monthIndex: q.cycle.monthIndex,
     question: q.question,
     askedAtLabel: formatDateTime(q.askedAt),
     state: q.state,

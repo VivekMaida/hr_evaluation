@@ -16,10 +16,13 @@ type SizeSpec = {
 /**
  * Three sizes, and only three.
  *
- * - large  — 24px bars, 118px track, score printed above each month. Used once
- *            per Scorecard, at the top of the record.
- * - medium — 13px bars, 60px track, month initials only. Beside the rating
- *            control in Reviews and in the Performance Log side panel.
+ * - large  — 24px bars, 118px track, score printed above each month. Used on
+ *            an employee's own Home, where the year is the whole screen.
+ * - medium — 13px bars, 60px track, month initials only. The Scorecard's
+ *            context band (the KRA matrix is that screen's substance, so the
+ *            strip frames it rather than leading it) and the Performance Log
+ *            side panel. Reviews carries no strip at all — it argues the
+ *            rating in words and links to the Scorecard for the shape.
  * - small  — 4px bars, 20px track, 70px total. No labels: it reads as shape,
  *            not as data. Never smaller than this.
  */
