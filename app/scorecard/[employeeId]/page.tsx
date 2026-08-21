@@ -58,6 +58,7 @@ export default async function ScorecardPage({
       recordMonths={recordMonths}
       own={own}
       isManager={isManager}
+      canRequestCorrection={isManager}
     />
   );
 }

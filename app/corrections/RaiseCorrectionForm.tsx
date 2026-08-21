@@ -20,12 +20,22 @@ function SubmitButton() {
   );
 }
 
-export function RaiseCorrectionForm({ targets }: { targets: CorrectionTarget[] }) {
+export function RaiseCorrectionForm({
+  targets,
+  initialEmployeeId,
+}: {
+  targets: CorrectionTarget[];
+  /** Preselects this person if they are one of the targets; ignored if not. */
+  initialEmployeeId?: string;
+}) {
   const [state, formAction] = useActionState<CorrectionState, FormData>(raiseCorrection, {
     error: null,
     ok: false,
   });
-  const [employeeId, setEmployeeId] = useState(targets[0]?.employeeId ?? '');
+  const preselected = targets.some((t) => t.employeeId === initialEmployeeId)
+    ? (initialEmployeeId as string)
+    : (targets[0]?.employeeId ?? '');
+  const [employeeId, setEmployeeId] = useState(preselected);
 
   const selected = targets.find((t) => t.employeeId === employeeId) ?? null;
   const cycles = selected?.cycles ?? [];

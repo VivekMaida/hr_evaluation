@@ -27,7 +27,6 @@ const ROUTE_RULES: { path: string; roles: Role[] }[] = [
   // An employee has no part in the flow — the page refuses them too.
   { path: '/corrections', roles: ['MANAGER', 'HR'] },
   { path: '/calibration', roles: ['HR'] },
-  { path: '/reports', roles: ['HR'] },
   { path: '/admin', roles: ['HR'] },
   { path: '/profile', roles: ALL },
   { path: '/activity', roles: ['HR'] },

@@ -78,6 +78,7 @@ export function Scorecard({
   recordMonths = [],
   own = false,
   isManager = false,
+  canRequestCorrection = false,
 }: {
   subject: ScorecardSubject;
   /** One row per month with a score on record, for the acknowledge/query section. */
@@ -86,6 +87,12 @@ export function Scorecard({
   own?: boolean;
   /** Viewing this person's own manager's record — shows "respond" on open queries. */
   isManager?: boolean;
+  /**
+   * The viewer can raise a correction request against this person's record.
+   * True only for their own manager: HR decides requests rather than raising
+   * them, and nobody can raise one against themselves (see canAccessEmployee).
+   */
+  canRequestCorrection?: boolean;
 }) {
   const band = coverageBand(subject.monthsLogged, subject.eligibleMonths);
   const thinCoverage = band === 'insufficient';
@@ -107,9 +114,15 @@ export function Scorecard({
         title="Scorecard"
         meta={`${FY_LABEL} · ${FY_RANGE_LABEL}`}
         aside={
-          <Link href="#" style={{ fontSize: 13.5, fontWeight: 700 }}>
+          /* A plain anchor, not next/link: this is a file coming back from a
+             route handler, not a page to navigate to. */
+          <a
+            href={`/api/scorecard/export?employeeId=${encodeURIComponent(subject.id)}`}
+            download
+            style={{ fontSize: 13.5, fontWeight: 700 }}
+          >
             Export record
-          </Link>
+          </a>
         }
       />
 
@@ -164,6 +177,13 @@ export function Scorecard({
                   <>
                     Every figure here is worked out from the months on record, not from the whole
                     year. The matrix below shows each of them.
+                    {missedCount > 0 ? (
+                      <>
+                        {' '}
+                        If a month is missing that should have been filled in, speak to your
+                        manager: they can ask for it to be added.
+                      </>
+                    ) : null}
                   </>
                 ) : (
                   <>
@@ -175,14 +195,17 @@ export function Scorecard({
                 )}
               </div>
             </div>
-            {missedCount > 0 ? (
-              <button
-                type="button"
+            {missedCount > 0 && canRequestCorrection ? (
+              /* Back-entry is a correction request and nothing else: a closed
+                 month only reopens once HR approves one. Prefilled with this
+                 person so the manager lands on the right row of the form. */
+              <Link
+                href={`/corrections?employee=${encodeURIComponent(subject.id)}`}
                 className="btn btn--destructive"
-                style={{ flex: 'none', fontSize: 14.5 }}
+                style={{ flex: 'none', fontSize: 14.5, textDecoration: 'none' }}
               >
                 Request back-entry
-              </button>
+              </Link>
             ) : null}
           </div>
         ) : null}
@@ -195,13 +218,6 @@ export function Scorecard({
             <div style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>{subject.identity}</div>
           </div>
           <div className="row" style={{ gap: 10, flex: 'none' }}>
-            <button
-              type="button"
-              className="btn btn--secondary"
-              style={{ fontSize: 14.5, padding: '9px 18px' }}
-            >
-              Compare to team
-            </button>
             <Link
               href={reviewsHref}
               className="btn btn--primary"

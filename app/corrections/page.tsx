@@ -72,7 +72,19 @@ function RequestCard({ item, children }: { item: CorrectionItem; children?: Reac
  * report; HR approves or declines. An approved request reopens that one month
  * for that one person until it is resubmitted.
  */
-export default async function CorrectionsPage() {
+export default async function CorrectionsPage({
+  searchParams,
+}: {
+  /**
+   * `?employee=<id>` prefills the form. Set by "Request back-entry" on the
+   * Scorecard, so a manager who spotted a hole in someone's record arrives
+   * with that person already chosen rather than picking them out again. Only
+   * a hint: an id that isn't one of this manager's correctable reports is
+   * ignored and the form falls back to its first target.
+   */
+  searchParams: Promise<{ employee?: string }>;
+}) {
+  const { employee: requestedEmployeeId } = await searchParams;
   const session = await auth();
   if (!session?.user) redirect('/login');
   if (session.user.role === 'EMPLOYEE') forbidden();
@@ -158,7 +170,7 @@ export default async function CorrectionsPage() {
         <Card style={{ padding: '20px 24px 22px' }}>
           <SectionLabel>Request a correction</SectionLabel>
           <div style={{ marginTop: 14 }}>
-            <RaiseCorrectionForm targets={targets} />
+            <RaiseCorrectionForm targets={targets} initialEmployeeId={requestedEmployeeId} />
           </div>
         </Card>
 
