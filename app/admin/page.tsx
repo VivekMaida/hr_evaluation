@@ -32,14 +32,31 @@ export default async function AdminPage() {
           </div>
         </Card>
 
+        <Card style={{ padding: '22px 26px 24px' }}>
+          <div className="stack" style={{ gap: 12 }}>
+            <SectionLabel>Corrections</SectionLabel>
+            <div style={{ fontSize: 21, fontWeight: 600, color: 'var(--navy)' }}>
+              Reopen a locked month
+            </div>
+            <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55 }}>
+              Managers ask for a locked month to be reopened when a figure is wrong. Approve
+              or decline with a reason; approving reopens that month for that person until
+              they resubmit it.
+            </p>
+            <Link href="/corrections" className="btn btn--primary" style={{ alignSelf: 'flex-start', textDecoration: 'none' }}>
+              Open corrections
+            </Link>
+          </div>
+        </Card>
+
         <Card tone="navy" style={{ padding: '22px 26px 24px' }}>
           <div className="stack" style={{ gap: 12 }}>
             <SectionLabel tone="navy">Not built yet</SectionLabel>
             <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55 }}>
-              Publishing the KRA set for a financial year, opening and locking monthly
-              cycles, and deciding the exception requests that queue up on HR Home —
-              back-entry, mid-year weight changes, target resets. The database models
-              exist; the screens do not.
+              Publishing the KRA set for a financial year, and deciding the exception requests
+              that queue up on HR Home — back-entry, mid-year weight changes, target resets.
+              The database models exist; the screens do not. Monthly cycles no longer need a
+              screen: they open and lock on their own schedule.
             </p>
           </div>
         </Card>

@@ -1,10 +1,14 @@
 employeeId,name,basis,unit,weight,target,type,sortOrder
-500112,Placeholder KRA 1,To be replaced with the real KRA,%,40,90,higher-is-better,1
-500112,Placeholder KRA 2,To be replaced with the real KRA,%,35,85,higher-is-better,2
-500112,Placeholder KRA 3,To be replaced with the real KRA,days,25,5,lower-is-better,3
-S150,Placeholder KRA 1,To be replaced with the real KRA,%,40,90,higher-is-better,1
-S150,Placeholder KRA 2,To be replaced with the real KRA,%,35,85,higher-is-better,2
-S150,Placeholder KRA 3,To be replaced with the real KRA,days,25,5,lower-is-better,3
-M044,Placeholder KRA 1,To be replaced with the real KRA,%,40,90,higher-is-better,1
-M044,Placeholder KRA 2,To be replaced with the real KRA,%,35,85,higher-is-better,2
-M044,Placeholder KRA 3,To be replaced with the real KRA,days,25,5,lower-is-better,3
+500112,Payroll inputs submitted before cut-off,Share of payroll inputs submitted before the monthly cut-off,%,30,100,higher-is-better,1
+500112,Payroll input errors found after submission,Count of input errors found after submission,count,25,0,lower-is-better,2
+500112,F&F cases closed within agreed TAT,Share of full-and-final cases closed within the agreed TAT,%,20,100,higher-is-better,3
+500112,Salary queries resolved within 48 hours,Share of salary queries resolved within 48 hours,%,15,90,higher-is-better,4
+500112,MIS reports submitted on schedule,Share of MIS reports submitted on schedule,%,10,100,higher-is-better,5
+S150,Events and campaigns delivered as planned,Share of planned events and campaigns delivered,%,30,100,higher-is-better,1
+S150,Employee connect sessions completed,Count of employee connect sessions completed,count,25,4,higher-is-better,2
+S150,Vendor invoices processed within TAT,Share of vendor invoices processed within the agreed TAT,%,25,95,higher-is-better,3
+S150,MIS reports submitted on schedule,Share of MIS reports submitted on schedule,%,20,100,higher-is-better,4
+M044,Critical vacancies closed within 30 days,Count of critical vacancies closed within 30 days,count,35,4,higher-is-better,1
+M044,Joining formalities completed on day one,Share of joiners with formalities completed on day one,%,25,100,higher-is-better,2
+M044,Induction completed within TAT,Share of inductions completed within the agreed TAT,%,20,100,higher-is-better,3
+M044,Escalations open at month end,Count of escalations still open at month end,count,20,0,lower-is-better,4

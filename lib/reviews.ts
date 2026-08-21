@@ -1,4 +1,3 @@
-import type { ReviewState } from '@prisma/client';
 import { getContextNotes, type ContextNote } from './context-notes';
 import { FISCAL_YEAR, FY_LABEL } from './constants';
 import { prisma } from './db';
@@ -10,11 +9,21 @@ import {
   pointsFromCycleScores,
   yearAverage as computeYearAverage,
 } from './employee-year';
+import { consistency, halves, trend } from './score';
+import { coverageBand, consistencyLabel, trendLabel, type CoverageBand } from './scorecard';
 import type { MonthPoint } from './types';
 
 /* ---------------------------------------------------------------------------
-   Reviews — the annual rating. Ratings appear here and nowhere else; every
-   other surface deals in weighted achievement percentages.
+   Reviews — the annual figure.
+
+   This is not a year-end step. There is no draft, no submission and no
+   sign-off: the aggregate *is* the rating, recomputed from whatever months
+   have locked so far every time the screen is opened. A manager looking in
+   November sees the year to date; the same screen in March simply has more
+   months in it.
+
+   Consequently nothing here reads or writes AnnualReview. The rating cannot
+   drift from the record because it is never stored separately from it.
    --------------------------------------------------------------------------- */
 
 export type Band = {
@@ -34,28 +43,12 @@ export const BANDS: Band[] = [
   { value: 5, label: 'Outstanding', from: 115, to: null, range: '115 and above' },
 ];
 
-export function impliedBand(yearAverage: number): Band {
+/** The band the record itself lands in. With no year-end override, this is the rating. */
+export function bandFor(yearAverage: number): Band {
   return (
-    BANDS.find((b) => yearAverage >= b.from && (b.to === null || yearAverage <= b.to)) ??
-    BANDS[0]
+    BANDS.find((b) => yearAverage >= b.from && (b.to === null || yearAverage <= b.to)) ?? BANDS[0]
   );
 }
-
-/** A written justification is required at two bands or more from the record. */
-export const JUSTIFICATION_MIN_CHARS = 40;
-
-/**
- * Cohort chrome for the header — where this employee sits in the lead's
- * submission queue this cycle. Not wired to a roster count yet; still a
- * placeholder, but no longer the source of anyone's actual record.
- */
-export const REVIEW_CONTEXT = {
-  cycle: `Annual appraisal ${FY_LABEL}`,
-  closes: 'lead submissions close Saturday, 24 April 2027',
-  submitted: 2,
-  total: 7,
-  position: 'Employee 3 of 7',
-};
 
 export type { ContextNote };
 
@@ -67,7 +60,32 @@ export type ReviewSubject = {
   monthsLogged: number;
   /** How many of the twelve months this person is actually eligible for — see eligibleFromMonthIndex(). */
   eligibleMonths: number;
+  /** Mean of the logged months only — never a projection over the eligible ones. */
   yearAverage: number;
+  /** The band `yearAverage` falls in. The rating, as things stand. */
+  band: Band;
+
+  /* The aggregate, recomputed on every read. */
+  consistencySd: number | null;
+  consistency: string;
+  trendDelta: number | null;
+  trend: string;
+  trendHalves: { first: number; second: number } | null;
+  coverage: CoverageBand;
+  lowest: number | null;
+  highest: number | null;
+
+  /**
+   * The basis, made explicit so nobody reads the figure as a full-year one.
+   * `includedMonths` are exactly the months in `yearAverage`; `pendingMonths`
+   * are eligible months that have not been logged (open, missed or still to
+   * come) and are in nothing.
+   */
+  includedMonths: string[];
+  pendingMonths: string[];
+  /** True while months remain that could still change the figure. */
+  stillAccruing: boolean;
+
   contextNotes: ContextNote[];
   evidence: {
     monthsLogged: string;
@@ -77,62 +95,21 @@ export type ReviewSubject = {
   };
 };
 
-/**
- * The lead's decision on this year's rating — separate from ReviewSubject,
- * which is the record the decision is made against. A missing AnnualReview
- * row reads the same as NOT_STARTED; nothing has been decided yet either way.
- */
-export type ReviewRecord = {
-  state: ReviewState;
-  chosenBand: number | null;
-  justification: string | null;
-  reviewerComment: string | null;
-  submittedAtLabel: string | null;
-};
-
-const NOT_STARTED: ReviewRecord = {
-  state: 'NOT_STARTED',
-  chosenBand: null,
-  justification: null,
-  reviewerComment: null,
-  submittedAtLabel: null,
-};
-
-/** An employee's own rating is visible only once a lead (or HR) has finalized it. */
-export function isFinalized(state: ReviewState): boolean {
-  return state === 'SUBMITTED' || state === 'CALIBRATED';
-}
-
 export type ReviewData = {
   employee: { id: string; name: string; title: string };
-  /** null means the employee exists but has nothing submitted yet. */
+  /** null means the employee exists but no month has been logged yet. */
   subject: ReviewSubject | null;
-  review: ReviewRecord;
 };
+
+/** Short month label — "August 2026" becomes "Aug". */
+function shortMonth(label: string): string {
+  return label.split(' ')[0]?.slice(0, 3) ?? label;
+}
 
 /** Returns null only when the employee does not exist. */
 export async function getReviewData(employeeId: string): Promise<ReviewData | null> {
   const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
   if (!employee) return null;
-
-  const annualReview = await prisma.annualReview.findUnique({
-    where: { employeeId_fiscalYear: { employeeId, fiscalYear: FISCAL_YEAR } },
-  });
-  const review: ReviewRecord = annualReview
-    ? {
-        state: annualReview.state,
-        chosenBand: annualReview.chosenBand,
-        justification: annualReview.justification,
-        reviewerComment: annualReview.reviewerComment,
-        submittedAtLabel: annualReview.submittedAt
-          ? annualReview.submittedAt.toLocaleDateString('en-IN', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })
-          : null,
-      }
-    : NOT_STARTED;
 
   const base = { id: employee.id, name: employee.name, title: employee.title };
 
@@ -140,19 +117,22 @@ export async function getReviewData(employeeId: string): Promise<ReviewData | nu
   const eligibleMonths = eligibleMonthCount(fromIndex);
 
   const scores = await getEmployeeCycleScores(employeeId, FISCAL_YEAR);
+  const eligible = scores.filter((s) => s.monthIndex >= fromIndex);
   const months = countMonthsLogged(scores, fromIndex);
-  if (months === 0) return { employee: base, subject: null, review };
+  if (months === 0) return { employee: base, subject: null };
 
   const points = pointsFromCycleScores(scores, fromIndex);
   const average = computeYearAverage(scores) as number;
-  const above120 = scores.filter(
-    (s) => s.monthIndex >= fromIndex && s.weightedScore !== null && s.weightedScore > 120,
-  ).length;
-  const below70 = scores.filter(
-    (s) => s.monthIndex >= fromIndex && s.weightedScore !== null && s.weightedScore < 70,
-  ).length;
+
+  const logged = eligible.filter((s) => s.weightedScore !== null);
+  const above120 = logged.filter((s) => (s.weightedScore as number) > 120).length;
+  const below70 = logged.filter((s) => (s.weightedScore as number) < 70).length;
+  const loggedValues = logged.map((s) => s.weightedScore as number);
 
   const contextNotes = await getContextNotes(employeeId, FISCAL_YEAR);
+
+  const sd = consistency(points);
+  const delta = trend(points);
 
   const subject: ReviewSubject = {
     id: employee.id,
@@ -162,6 +142,21 @@ export async function getReviewData(employeeId: string): Promise<ReviewData | nu
     monthsLogged: months,
     eligibleMonths,
     yearAverage: average,
+    band: bandFor(average),
+
+    consistencySd: sd,
+    consistency: consistencyLabel(sd, months),
+    trendDelta: delta,
+    trend: trendLabel(delta),
+    trendHalves: halves(points),
+    coverage: coverageBand(months, eligibleMonths),
+    lowest: loggedValues.length ? Math.min(...loggedValues) : null,
+    highest: loggedValues.length ? Math.max(...loggedValues) : null,
+
+    includedMonths: logged.map((s) => shortMonth(s.label)),
+    pendingMonths: eligible.filter((s) => s.weightedScore === null).map((s) => shortMonth(s.label)),
+    stillAccruing: months < eligibleMonths,
+
     contextNotes,
     evidence: {
       monthsLogged: `${months} of ${eligibleMonths}`,
@@ -171,5 +166,10 @@ export async function getReviewData(employeeId: string): Promise<ReviewData | nu
     },
   };
 
-  return { employee: base, subject, review };
+  return { employee: base, subject };
 }
+
+/** Header chrome — the fiscal year, not a submission deadline. */
+export const REVIEW_CONTEXT = {
+  cycle: `Annual figure ${FY_LABEL}`,
+};

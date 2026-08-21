@@ -3,7 +3,8 @@ import { forbidden, redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { EmptyState } from '@/components/EmptyState';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { FISCAL_YEAR, FY_LABEL } from '@/lib/constants';
+import { FISCAL_YEAR, FY_LABEL, now } from '@/lib/constants';
+import { deriveCycles } from '@/lib/cycles';
 import { prisma } from '@/lib/db';
 
 export const metadata = { title: 'No open cycle · M3M Perform' };
@@ -21,23 +22,33 @@ export default async function NoTargetsPage() {
   if (!session?.user) redirect('/login');
   if (session.user.role === 'EMPLOYEE') forbidden();
 
-  const cycles = await prisma.cycle.findMany({
-    where: { fiscalYear: FISCAL_YEAR },
-    orderBy: { monthIndex: 'asc' },
-  });
+  const cycles = deriveCycles(
+    await prisma.cycle.findMany({
+      where: { fiscalYear: FISCAL_YEAR },
+      orderBy: { monthIndex: 'asc' },
+    }),
+    now(),
+  );
   const nextCycle = cycles.find((c) => c.state === 'FUTURE');
 
   const reason =
     cycles.length === 0
       ? `No cycles have been created yet for ${FY_LABEL}.`
       : nextCycle
-        ? `${nextCycle.label} hasn't been opened yet.`
+        ? `${nextCycle.label} hasn't opened yet.`
         : `Every cycle for ${FY_LABEL} is locked — the fiscal year is complete.`;
 
+  // Cycles open and lock on their own schedule now (see lib/cycles.ts), so
+  // there is nobody to ask and nothing to press — only a date to wait for.
   const guidance =
-    session.user.role === 'HR'
-      ? "You'll need to open the next cycle from Admin before performance logging can resume."
-      : 'Ask HR to open the next cycle.';
+    nextCycle?.opensOn
+      ? `It opens on its own on ${nextCycle.opensOn.toLocaleDateString('en-IN', {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        })}. No one needs to open it.`
+      : 'Nothing further is scheduled for this fiscal year.';
 
   return (
     <>

@@ -31,7 +31,7 @@ import path from 'path';
 import { PrismaClient, type KpiType, type Role } from '@prisma/client';
 import { FISCAL_YEAR, now } from '../lib/constants';
 import { parseCsv } from '../lib/csv';
-import { calendarMonthFor, cycleStateFor, cycleWindowFor } from '../lib/cycles';
+import { calendarMonthFor, cycleStateFor, earlyOpenFor, effectiveCycleWindow } from '../lib/cycles';
 import { BCRYPT_ROUNDS, PILOT_DEFAULT_PASSWORD } from '../lib/pilot-auth';
 
 const prisma = new PrismaClient();
@@ -203,11 +203,16 @@ function validate(roster: RosterRow[], kpiRows: KpiRow[]): string[] {
 async function seedCycles(): Promise<void> {
   const [fyStartYear] = FISCAL_YEAR.split('-').map(Number);
   const asOf = now();
-  console.log(`  (computing cycle state as of ${asOf.toISOString()})`);
+  console.log(`  (stamping a state snapshot as of ${asOf.toISOString()} — the app derives state at read time)`);
   for (let monthIndex = 5; monthIndex <= 12; monthIndex += 1) {
     const cal = calendarMonthFor(monthIndex, fyStartYear);
     const label = `${MONTH_NAMES[cal.month - 1]} ${cal.year}`;
-    const window = cycleWindowFor(monthIndex, fyStartYear);
+    // Natural window, unless this month is opened early for the pilot — see
+    // EARLY_OPEN in lib/cycles.ts. locksOn is never moved by an override.
+    const window = effectiveCycleWindow(FISCAL_YEAR, monthIndex, fyStartYear);
+    const early = earlyOpenFor(FISCAL_YEAR, monthIndex);
+    // The stored column is only a snapshot for anyone reading the database
+    // directly; every app read recomputes it from opensOn/locksOn.
     const state = cycleStateFor(window, asOf);
 
     await prisma.cycle.upsert({
@@ -222,7 +227,10 @@ async function seedCycles(): Promise<void> {
         locksOn: window.locksOn,
       },
     });
-    console.log(`  ${label}: ${state} (locks ${window.locksOn.toISOString()})`);
+    console.log(
+      `  ${label}: ${state} (opens ${window.opensOn.toISOString()}, locks ${window.locksOn.toISOString()})` +
+        (early ? ` — ${early.note}` : ''),
+    );
   }
 }
 

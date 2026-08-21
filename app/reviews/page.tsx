@@ -5,7 +5,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { ReviewScreen } from '@/components/reviews/ReviewScreen';
 import { canAccessEmployee } from '@/lib/access';
 import { EMPLOYEE_RECORD_VISIBILITY, FY_LABEL } from '@/lib/constants';
-import { getReviewData, isFinalized } from '@/lib/reviews';
+import { getReviewData } from '@/lib/reviews';
 
 export const metadata = { title: 'Reviews · M3M Perform' };
 export const dynamic = 'force-dynamic';
@@ -17,38 +17,27 @@ export default async function ReviewsPage() {
 
   const employeeId = session.user.employeeId;
   const isEmployee = session.user.role === 'EMPLOYEE';
+  // The only gate on an employee seeing their own figure is the pilot-wide
+  // visibility flag. There is no "finalized" state to wait for any more — the
+  // figure is the aggregate of the months already on record.
   if (isEmployee && EMPLOYEE_RECORD_VISIBILITY === 'hidden') redirect('/profile');
   if (!(await canAccessEmployee(session.user, employeeId, false))) forbidden();
 
   const data = await getReviewData(employeeId);
   if (!data) redirect('/login');
 
-  // An employee sees a finalized rating, never a draft in progress.
-  if (isEmployee && !isFinalized(data.review.state)) {
-    return (
-      <>
-        <ScreenHeader title="Reviews" meta={`Annual appraisal ${FY_LABEL}`} />
-        <EmptyState
-          label="Not finalized yet"
-          heading="Your rating for this year has not been finalized"
-          body="Once your manager submits it, it will show here — the band, the justification behind it, and when it was submitted."
-        />
-      </>
-    );
-  }
-
   if (!data.subject) {
     return (
       <>
-        <ScreenHeader title="Reviews" meta={`Annual appraisal ${FY_LABEL}`} />
+        <ScreenHeader title="Reviews" meta={`Annual figure ${FY_LABEL}`} />
         <EmptyState
-          label="Nothing to review yet"
-          heading={`${data.employee.name} has no submitted months this year`}
-          body="A rating needs at least one submitted month on record before there is anything to review."
+          label="Nothing on record yet"
+          heading="No month has been logged yet this year"
+          body="The annual figure is the average of the months on record, so it appears as soon as the first month is submitted and grows from there. Nothing is waiting on a year-end step."
         />
       </>
     );
   }
 
-  return <ReviewScreen subject={data.subject} review={data.review} own={isEmployee} />;
+  return <ReviewScreen subject={data.subject} own={isEmployee} />;
 }

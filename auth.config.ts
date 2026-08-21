@@ -23,6 +23,9 @@ const ROUTE_RULES: { path: string; roles: Role[] }[] = [
   { path: '/performance-log', roles: ['MANAGER', 'HR'] },
   { path: '/scorecard', roles: ALL },
   { path: '/reviews', roles: ALL },
+  // A manager raises a correction against their own report; HR decides it.
+  // An employee has no part in the flow — the page refuses them too.
+  { path: '/corrections', roles: ['MANAGER', 'HR'] },
   { path: '/calibration', roles: ['HR'] },
   { path: '/reports', roles: ['HR'] },
   { path: '/admin', roles: ['HR'] },

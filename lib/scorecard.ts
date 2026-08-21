@@ -211,11 +211,15 @@ export async function getScorecardData(
   const lockedScores = scores.filter((s) => s.monthIndex >= fromIndex && s.state === 'LOCKED');
   const monthsLocked = lockedScores.filter((s) => s.weightedScore !== null).length;
 
-  // `cycle` was never read off these rows — the join was pure overhead.
+  // `cycle` was never read off these rows — the join was pure overhead. It
+  // also cannot filter on `cycle.state` any more: the stored column is only a
+  // snapshot, and locked-ness is derived from the clock. `lockedScores` above
+  // already carries the derived state, so scope the query by its cycle ids.
+  const lockedCycleIds = lockedScores.map((s) => s.cycleId);
   const [entries, idsByLineage] = await Promise.all([
-    prisma.monthlyEntry.findMany({
-      where: { employeeId, cycle: { fiscalYear: FISCAL_YEAR, state: 'LOCKED' } },
-    }),
+    lockedCycleIds.length
+      ? prisma.monthlyEntry.findMany({ where: { employeeId, cycleId: { in: lockedCycleIds } } })
+      : Promise.resolve([]),
     getKpiIdsByLineage(employeeId, FISCAL_YEAR),
   ]);
   const entriesByKpiAndCycle = new Map(entries.map((e) => [`${e.kpiId}:${e.cycleId}`, e]));

@@ -1,4 +1,6 @@
 import type { Cycle, CycleState, Kpi, KpiType } from '@prisma/client';
+import { now } from './constants';
+import { deriveCycles } from './cycles';
 import { prisma } from './db';
 
 /* ---------------------------------------------------------------------------
@@ -162,7 +164,7 @@ export async function getCurrentAndPendingKpiSets(
   employeeId: string,
   fiscalYear: string,
 ): Promise<CurrentAndPendingKpiSets> {
-  const cycles = await prisma.cycle.findMany({ where: { fiscalYear } });
+  const cycles = deriveCycles(await prisma.cycle.findMany({ where: { fiscalYear } }), now());
   const pendingFrom = nextEditableMonthIndex(cycles);
 
   // Nothing has ever gone live (pre-season), or the fiscal year is spent —

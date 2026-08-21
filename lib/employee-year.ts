@@ -1,5 +1,6 @@
 import type { CycleState } from '@prisma/client';
-import { PROGRAMME_START } from './constants';
+import { now, PROGRAMME_START } from './constants';
+import { deriveCycles } from './cycles';
 import { prisma } from './db';
 import { FY_MONTHS, type MonthPoint } from './types';
 
@@ -60,7 +61,7 @@ export async function getEmployeeCycleScores(
   employeeId: string,
   fiscalYear: string,
 ): Promise<CycleScore[]> {
-  const [cycles, submissions] = await Promise.all([
+  const [rawCycles, submissions] = await Promise.all([
     prisma.cycle.findMany({
       where: { fiscalYear },
       orderBy: { monthIndex: 'asc' },
@@ -69,6 +70,9 @@ export async function getEmployeeCycleScores(
       where: { employeeId, state: 'SUBMITTED', cycle: { fiscalYear } },
     }),
   ]);
+  // State is derived from the clock, never read off the stored column — see
+  // lib/cycles.ts. A month opens and locks on its own from here on.
+  const cycles = deriveCycles(rawCycles, now());
 
   const byCycle = new Map(submissions.map((s) => [s.cycleId, s]));
 
@@ -103,7 +107,7 @@ export async function getEmployeeCycleScoresBatch(
   employeeIds: string[],
   fiscalYear: string,
 ): Promise<{ scoresByEmployee: Map<string, CycleScore[]>; cycles: Awaited<ReturnType<typeof prisma.cycle.findMany>> }> {
-  const [cycles, submissions] = await Promise.all([
+  const [rawCycles, submissions] = await Promise.all([
     prisma.cycle.findMany({
       where: { fiscalYear },
       orderBy: { monthIndex: 'asc' },
@@ -112,6 +116,7 @@ export async function getEmployeeCycleScoresBatch(
       where: { employeeId: { in: employeeIds }, state: 'SUBMITTED', cycle: { fiscalYear } },
     }),
   ]);
+  const cycles = deriveCycles(rawCycles, now());
 
   const byEmployee = new Map<string, Map<string, (typeof submissions)[number]>>();
   for (const s of submissions) {

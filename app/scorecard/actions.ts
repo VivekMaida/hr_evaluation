@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { auth } from '@/auth';
+import { now } from '@/lib/constants';
+import { deriveCycle } from '@/lib/cycles';
 import { prisma } from '@/lib/db';
 
 export type ScorecardActionState = { error: string | null; ok: boolean };
@@ -18,8 +20,9 @@ export async function acknowledgeMonth(
   const cycleId = String(formData.get('cycleId') ?? '');
   if (!cycleId) return { error: 'Bad request.', ok: false };
 
-  const cycle = await prisma.cycle.findUnique({ where: { id: cycleId } });
-  if (!cycle) return { error: 'No such cycle.', ok: false };
+  const rawCycle = await prisma.cycle.findUnique({ where: { id: cycleId } });
+  if (!rawCycle) return { error: 'No such cycle.', ok: false };
+  const cycle = deriveCycle(rawCycle, now());
   if (cycle.state !== 'LOCKED') {
     return { error: 'Only a locked month can be acknowledged.', ok: false };
   }

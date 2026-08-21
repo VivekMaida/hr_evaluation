@@ -4,46 +4,34 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { YearStrip } from '@/components/YearStrip';
 import { Card, Chip, SectionLabel } from '@/components/ui';
 import { FY_LABEL, FY_RANGE_LABEL } from '@/lib/constants';
-import { BANDS, REVIEW_CONTEXT, impliedBand, type ReviewRecord, type ReviewSubject } from '@/lib/reviews';
-import { coverageBand, consistencyLabel, trendLabel } from '@/lib/scorecard';
-import { consistency, halves, signed, trend } from '@/lib/score';
-import { RatingCard } from './RatingCard';
-import { RatingSummary } from './RatingSummary';
+import { BANDS, REVIEW_CONTEXT, type ReviewSubject } from '@/lib/reviews';
+import { signed } from '@/lib/score';
+import { CurrentRating } from './CurrentRating';
 
 export function ReviewScreen({
   subject: S,
-  review,
   own = false,
 }: {
   subject: ReviewSubject;
-  review: ReviewRecord;
-  /** Viewing your own finalized rating — read-only, and no lead-queue chrome. */
+  /** Viewing your own record — no cross-team navigation chrome. */
   own?: boolean;
 }) {
-  const sd = consistency(S.points);
-  const h = halves(S.points);
-  const delta = trend(S.points);
-  const implied = impliedBand(S.yearAverage);
-  const band = coverageBand(S.monthsLogged, S.eligibleMonths);
-
-  const scores = S.points
-    .filter((p) => p.status === 'scored' && typeof p.score === 'number')
-    .map((p) => p.score as number);
-  const lo = scores.length > 0 ? Math.min(...scores) : null;
-  const hi = scores.length > 0 ? Math.max(...scores) : null;
+  // Everything below is computed in lib/reviews.ts from the months that have
+  // locked so far; the screen only formats it. There is no submission state
+  // because there is no submission — see CurrentRating.
+  const { consistencySd: sd, trendHalves: h, trendDelta: delta, coverage: band } = S;
+  const lo = S.lowest;
+  const hi = S.highest;
 
   return (
     <>
       <ScreenHeader
         title="Reviews"
-        meta={own ? `Annual appraisal ${FY_LABEL}` : `${REVIEW_CONTEXT.cycle} · ${REVIEW_CONTEXT.closes}`}
-        aside={
-          own ? null : (
-            <span className="num" style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
-              {REVIEW_CONTEXT.submitted} of {REVIEW_CONTEXT.total} submitted
-            </span>
-          )
-        }
+        meta={`${REVIEW_CONTEXT.cycle} · ${
+          S.stillAccruing
+            ? `${S.monthsLogged} of ${S.eligibleMonths} months in so far`
+            : 'every eligible month is in'
+        }`}
       />
 
       <div
@@ -62,17 +50,9 @@ export function ReviewScreen({
             <div style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>{S.identity}</div>
           </div>
           {own ? null : (
-            <div className="row" style={{ gap: 14, flex: 'none' }}>
-              <span className="num" style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
-                {REVIEW_CONTEXT.position}
-              </span>
-              <Link href="/reviews" style={{ fontSize: 13.5, fontWeight: 700 }}>
-                Previous
-              </Link>
-              <Link href="/reviews" style={{ fontSize: 13.5, fontWeight: 700 }}>
-                Next
-              </Link>
-            </div>
+            <Link href={`/scorecard/${S.id}`} style={{ fontSize: 13.5, fontWeight: 700, flex: 'none' }}>
+              Open full Scorecard
+            </Link>
           )}
         </div>
 
@@ -128,7 +108,8 @@ export function ReviewScreen({
                 {S.yearAverage.toFixed(1)}
               </div>
               <div style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
-                Mean of {S.monthsLogged} logged months
+                Mean of {S.monthsLogged} logged {S.monthsLogged === 1 ? 'month' : 'months'} —{' '}
+                {S.includedMonths.join(', ')}
               </div>
             </div>
           </Card>
@@ -137,7 +118,7 @@ export function ReviewScreen({
             <div className="stack" style={{ gap: 5 }}>
               <SectionLabel tone="navy">Consistency</SectionLabel>
               <div style={{ fontSize: 36, fontWeight: 600, color: 'var(--navy)', lineHeight: 1.05 }}>
-                {consistencyLabel(sd, S.monthsLogged)}
+                {S.consistency}
               </div>
               <div className="num" style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
                 {lo === null || hi === null
@@ -151,7 +132,7 @@ export function ReviewScreen({
             <div className="stack" style={{ gap: 5 }}>
               <SectionLabel tone="navy">Trend</SectionLabel>
               <div style={{ fontSize: 36, fontWeight: 600, color: 'var(--navy)', lineHeight: 1.05 }}>
-                {trendLabel(delta)}
+                {S.trend}
               </div>
               <div className="num" style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
                 {h === null
@@ -178,10 +159,10 @@ export function ReviewScreen({
               <CoverageBar points={S.points} />
               <div style={{ fontSize: 13.5, color: 'var(--grey-body)' }}>
                 {band === 'complete'
-                  ? 'Full year on record. This rating is rateable without an exception.'
+                  ? 'Enough of the year is on record for the figure to stand on its own.'
                   : band === 'partial'
-                    ? 'Rateable, but flagged for HR in Calibration.'
-                    : 'Coverage is too thin to rate without an HR exception.'}
+                    ? 'Enough to be meaningful, but thin — HR should see the gaps.'
+                    : 'Too thin to carry the weight of a full-year figure yet.'}
               </div>
             </div>
           </Card>
@@ -195,7 +176,7 @@ export function ReviewScreen({
             alignItems: 'start',
           }}
         >
-          {own ? <RatingSummary review={review} /> : <RatingCard yearAverage={S.yearAverage} />}
+          <CurrentRating subject={S} own={own} />
 
           <div className="stack" style={{ gap: 16 }}>
             <Card tone="navy" style={{ padding: '18px 20px 20px' }}>
@@ -232,23 +213,23 @@ export function ReviewScreen({
             <Card tone="navy" style={{ padding: '18px 20px 20px' }}>
               <div className="stack" style={{ gap: 10 }}>
                 <SectionLabel tone="navy">Band reference</SectionLabel>
-                {[...BANDS].reverse().map((band) => {
-                  const isImplied = band.value === implied.value;
+                {[...BANDS].reverse().map((b) => {
+                  const isCurrent = b.value === S.band.value;
                   return (
                     <div
-                      key={band.value}
+                      key={b.value}
                       className="spread"
                       style={{
                         fontSize: 14,
-                        fontWeight: isImplied ? 700 : 400,
-                        color: isImplied ? 'var(--navy)' : undefined,
+                        fontWeight: isCurrent ? 700 : 400,
+                        color: isCurrent ? 'var(--navy)' : undefined,
                       }}
                     >
                       <span>
-                        {band.value} {band.label}
+                        {b.value} {b.label}
                       </span>
                       <span className="num" style={{ color: 'var(--navy)' }}>
-                        {band.range}
+                        {b.range}
                       </span>
                     </div>
                   );
@@ -261,8 +242,8 @@ export function ReviewScreen({
                     marginTop: 4,
                   }}
                 >
-                  The band is a reference, not a verdict. One band either way needs no
-                  explanation; two or more does.
+                  The band in bold is where the logged months currently average out. It moves on
+                  its own as months lock — nobody selects it.
                 </div>
               </div>
             </Card>

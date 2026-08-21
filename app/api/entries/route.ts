@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '@/auth';
 import { canAccessEmployee } from '@/lib/access';
-import { FISCAL_YEAR } from '@/lib/constants';
+import { FISCAL_YEAR, now } from '@/lib/constants';
+import { getActiveReopen, resolveReopen } from '@/lib/corrections';
+import { deriveCycle } from '@/lib/cycles';
 import { prisma } from '@/lib/db';
 import { blockers, buildRows, weightedScoreOf } from '@/lib/entries';
 import { getEmployeeCycleScores, pointsFromCycleScores } from '@/lib/employee-year';
@@ -53,7 +55,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Not your team' }, { status: 403 });
   }
 
-  const [employee, cycle, kpis] = await Promise.all([
+  const [employee, rawCycle, kpis] = await Promise.all([
     prisma.employee.findUnique({
       where: { id: employeeId },
       select: { id: true, name: true, title: true, leadId: true },
@@ -68,17 +70,19 @@ export async function GET(request: Request) {
     getKpiSetForCycle(employeeId, FISCAL_YEAR, monthIndex),
   ]);
 
-  if (!employee || !cycle) {
+  if (!employee || !rawCycle) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
+  const cycle = deriveCycle(rawCycle, now());
 
-  const [entries, submission, cycleScores] = await Promise.all([
+  const [entries, submission, cycleScores, reopened] = await Promise.all([
     prisma.monthlyEntry.findMany({ where: { employeeId, cycleId: cycle.id } }),
     prisma.submission.findFirst({
       where: { employeeId, cycleId: cycle.id, state: { in: ['DRAFT', 'SUBMITTED'] } },
       orderBy: { updatedAt: 'desc' },
     }),
     getEmployeeCycleScores(employeeId, FISCAL_YEAR),
+    cycle.state === 'OPEN' ? Promise.resolve(null) : getActiveReopen(employeeId, cycle.id),
   ]);
 
   const rows = buildRows(kpis, entries);
@@ -97,7 +101,10 @@ export async function GET(request: Request) {
           submittedAt: submission.submittedAt,
         }
       : null,
-    editable: cycle.state === 'OPEN',
+    // A locked month is editable only while an approved correction reopens it.
+    editable: cycle.state === 'OPEN' || Boolean(reopened),
+    /** Set while this month is only writable because of an approved correction. */
+    reopened: reopened ? { reason: reopened.reason, approvedAtLabel: reopened.approvedAtLabel } : null,
     /** This employee's real twelve-month record, Apr → Mar, for the side panel. */
     points: pointsFromCycleScores(cycleScores),
   });
@@ -119,15 +126,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Not your team' }, { status: 403 });
   }
 
-  const cycle = await prisma.cycle.findUnique({
+  const rawCycle = await prisma.cycle.findUnique({
     where: { fiscalYear_monthIndex: { fiscalYear: FISCAL_YEAR, monthIndex } },
   });
-  if (!cycle) return NextResponse.json({ error: 'No such cycle' }, { status: 404 });
+  if (!rawCycle) return NextResponse.json({ error: 'No such cycle' }, { status: 404 });
+  const cycle = deriveCycle(rawCycle, now());
 
-  // Locked months are read-only. Changing one takes a correction request.
-  if (cycle.state !== 'OPEN') {
+  // Locked months are read-only — unless HR has approved a correction request
+  // for this employee and this month, which reopens it for them alone until
+  // the corrected month is resubmitted. See lib/corrections.ts.
+  const reopened = cycle.state === 'OPEN' ? null : await getActiveReopen(employeeId, cycle.id);
+  if (cycle.state !== 'OPEN' && !reopened) {
     return NextResponse.json(
-      { error: `${cycle.label} is ${cycle.state.toLowerCase()} and cannot be edited` },
+      {
+        error: `${cycle.label} is ${cycle.state.toLowerCase()} and cannot be edited. Ask HR to approve a correction request to reopen it.`,
+      },
       { status: 409 },
     );
   }
@@ -256,11 +269,29 @@ export async function POST(request: Request) {
     });
   });
 
+  // Submitting a reopened month *is* the correction, so the reopen ends here
+  // and the month locks again. A draft save leaves it open to keep working.
+  if (reopened && submit) {
+    await resolveReopen(employeeId, cycle.id);
+    await prisma.activityLog.create({
+      data: {
+        actorId,
+        employeeId,
+        cycleId: cycle.id,
+        kind: 'CORRECTION_APPLIED',
+        summary: `${cycle.label} corrected and resubmitted${score === null ? '' : `, ${score.toFixed(1)}`}`,
+        meta: { correctionId: reopened.correctionId, weightedScore: score },
+      },
+    });
+  }
+
   return NextResponse.json({
     ok: true,
     saved: rows.length,
     weightedScore: score,
     submitted: submit,
+    /** Set while this month is only writable because of an approved correction. */
+    reopened: reopened ? { reason: reopened.reason, approvedAtLabel: reopened.approvedAtLabel } : null,
     ...check,
     rows,
   });

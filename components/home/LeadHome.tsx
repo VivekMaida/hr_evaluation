@@ -137,12 +137,9 @@ export function LeadHome({ data }: { data: LeadHomeData }) {
               style={{ alignItems: 'baseline', marginBottom: 16 }}
             >
               <SectionLabel>My Team · {openMonthShort}</SectionLabel>
-              <span
-                style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--grey-line)' }}
-                title="My Team has not been designed yet"
-              >
+              <Link href="/my-team" style={{ fontSize: 13.5, fontWeight: 700 }}>
                 Open My Team
-              </span>
+              </Link>
             </div>
 
             <table className="data-table" style={{ fontSize: 14.5 }}>
@@ -264,9 +261,8 @@ export function LeadHome({ data }: { data: LeadHomeData }) {
                   ))
                 )}
               </div>
-              <Link href="/activity" style={{ fontSize: 13.5, fontWeight: 700 }}>
-                Full activity log
-              </Link>
+              {/* The full activity log is an HR-only screen and isn't drawn
+                  yet — linking a manager there only produced a 403. */}
             </div>
           </Card>
         </div>

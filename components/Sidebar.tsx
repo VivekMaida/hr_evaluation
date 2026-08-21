@@ -22,9 +22,11 @@ type NavItem = {
 
 const PRIMARY: NavItem[] = [
   { label: 'Home', href: '/' },
+  { label: 'My Team', href: '/my-team', visibleTo: ['MANAGER'] },
   { label: 'Performance Log', href: '/performance-log', visibleTo: ['MANAGER', 'HR'] },
   { label: 'Scorecard', href: '/scorecard' },
   { label: 'Reviews', href: '/reviews' },
+  { label: 'Corrections', href: '/corrections', visibleTo: ['MANAGER', 'HR'] },
 ];
 
 const SECONDARY: NavItem[] = [

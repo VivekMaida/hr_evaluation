@@ -1,4 +1,5 @@
 import { now } from './constants';
+import { deriveCycles } from './cycles';
 import { prisma } from './db';
 
 /* ---------------------------------------------------------------------------
@@ -58,7 +59,7 @@ export async function getOrgCompleteness(fiscalYear: string): Promise<OrgComplet
   // of code. Writing them out explicitly costs the same number of queries
   // but lets them run as genuine siblings in the Promise.all below instead
   // of one one branch secretly being three sequential steps.
-  const [employeesCount, leadsCount, departments, employees, kpiEmployeeIds, cycles] = await Promise.all([
+  const [employeesCount, leadsCount, departments, employees, kpiEmployeeIds, rawCycles] = await Promise.all([
     prisma.employee.count(),
     prisma.user.count({ where: { role: 'MANAGER' } }),
     prisma.department.findMany({ select: { id: true, name: true } }),
@@ -66,6 +67,7 @@ export async function getOrgCompleteness(fiscalYear: string): Promise<OrgComplet
     prisma.kpi.findMany({ where: { fiscalYear }, select: { employeeId: true }, distinct: ['employeeId'] }),
     prisma.cycle.findMany({ where: { fiscalYear }, orderBy: { monthIndex: 'asc' } }),
   ]);
+  const cycles = deriveCycles(rawCycles, now());
 
   const openCycle = cycles.find((c) => c.state === 'OPEN') ?? null;
   const lockedCycles = cycles.filter((c) => c.state === 'LOCKED');

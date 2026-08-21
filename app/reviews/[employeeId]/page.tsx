@@ -5,7 +5,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { ReviewScreen } from '@/components/reviews/ReviewScreen';
 import { canAccessEmployee } from '@/lib/access';
 import { EMPLOYEE_RECORD_VISIBILITY, FY_LABEL } from '@/lib/constants';
-import { getReviewData, isFinalized } from '@/lib/reviews';
+import { getReviewData } from '@/lib/reviews';
 
 export const metadata = { title: 'Reviews · M3M Perform' };
 export const dynamic = 'force-dynamic';
@@ -22,40 +22,27 @@ export default async function ReviewForEmployeePage({
 
   const own = employeeId === session.user.employeeId;
   const isEmployeeOwnRecord = own && session.user.role === 'EMPLOYEE';
+  // As on /reviews: the pilot-wide visibility flag is the only gate on an
+  // employee's own figure. A manager or HR viewing someone else is never
+  // affected — canAccessEmployee already keeps an EMPLOYEE actor to their own id.
   if (isEmployeeOwnRecord && EMPLOYEE_RECORD_VISIBILITY === 'hidden') redirect('/profile');
   if (!(await canAccessEmployee(session.user, employeeId, false))) forbidden();
 
   const data = await getReviewData(employeeId);
   if (!data) notFound();
 
-  // An employee sees a finalized rating, never a draft in progress. This
-  // never fires for a manager or HR viewing someone else — canAccessEmployee
-  // already keeps an EMPLOYEE actor to their own id.
-  if (isEmployeeOwnRecord && !isFinalized(data.review.state)) {
-    return (
-      <>
-        <ScreenHeader title="Reviews" meta={`Annual appraisal ${FY_LABEL}`} />
-        <EmptyState
-          label="Not finalized yet"
-          heading="Your rating for this year has not been finalized"
-          body="Once your manager submits it, it will show here — the band, the justification behind it, and when it was submitted."
-        />
-      </>
-    );
-  }
-
   if (!data.subject) {
     return (
       <>
-        <ScreenHeader title="Reviews" meta={`Annual appraisal ${FY_LABEL}`} />
+        <ScreenHeader title="Reviews" meta={`Annual figure ${FY_LABEL}`} />
         <EmptyState
-          label="Nothing to review yet"
-          heading={`${data.employee.name} has no submitted months this year`}
-          body="A rating needs at least one submitted month on record before there is anything to review."
+          label="Nothing on record yet"
+          heading={`${data.employee.name} has no logged months this year`}
+          body="The annual figure is the average of the months on record, so it appears as soon as the first month is submitted and grows from there."
         />
       </>
     );
   }
 
-  return <ReviewScreen subject={data.subject} review={data.review} own={isEmployeeOwnRecord} />;
+  return <ReviewScreen subject={data.subject} own={isEmployeeOwnRecord} />;
 }

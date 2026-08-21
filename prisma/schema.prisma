@@ -61,6 +61,7 @@ model Employee {
   activity         ActivityLog[]      @relation("ActivitySubject")
   acknowledgements Acknowledgement[]
   queries          MonthQuery[]
+  corrections      CorrectionRequest[] @relation("CorrectionSubject")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -120,6 +121,7 @@ model Cycle {
   activity         ActivityLog[]
   acknowledgements Acknowledgement[]
   queries          MonthQuery[]
+  corrections      CorrectionRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -383,27 +385,42 @@ model ExceptionRequest {
   @@index([state])
 }
 
-/// Locked months cannot be edited by leads. To change a figure, raise one of
-/// these; HR reviews it and the change is stamped with who asked and who approved.
+/// A locked month cannot be edited. To change a figure in one, the employee's
+/// manager raises one of these with a reason; HR approves or declines, also
+/// with a reason. An approved request reopens that one month for that one
+/// employee — see lib/corrections.ts, which is the only place that decides
+/// whether a reopen is currently in force — and is marked resolved the moment
+/// the corrected month is resubmitted, which re-locks it.
+///
+/// Scoped to (employee, cycle) rather than to a single MonthlyEntry: a
+/// correction reopens the month, and the manager then re-enters whichever
+/// figures were wrong through the normal form.
 model CorrectionRequest {
   id String @id @default(cuid())
 
-  monthlyEntryId String
-  reason         String
+  employeeId String
+  employee   Employee @relation("CorrectionSubject", fields: [employeeId], references: [id], onDelete: Cascade)
+  cycleId    String
+  cycle      Cycle    @relation(fields: [cycleId], references: [id])
 
-  previousValue Decimal? @db.Decimal(14, 2)
-  proposedValue Decimal? @db.Decimal(14, 2)
+  /// Why the month needs reopening. Required of the manager.
+  reason String
 
   raisedById String
   raisedAt   DateTime @default(now())
 
-  state        RequestState @default(PENDING)
+  state RequestState @default(PENDING)
+  /// HR's reason for approving or declining. Required either way.
+  decisionNote String?
   decidedById  String?
   decidedAt    DateTime?
-  decisionNote String?
+
+  /// Set when the reopened month is resubmitted, which ends the reopen. A row
+  /// with state APPROVED and resolvedAt null is what makes a month writable.
+  resolvedAt DateTime?
 
   @@index([state])
-  @@index([monthlyEntryId])
+  @@index([employeeId, cycleId])
 }
 
 // ---------------------------------------------------------------------------

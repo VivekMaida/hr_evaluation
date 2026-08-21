@@ -32,7 +32,23 @@ export function achievementOf(
   lowerIsBetter: boolean,
 ): number | null {
   if (actual === null || !Number.isFinite(actual)) return null;
-  if (lowerIsBetter) return actual === 0 ? null : (target / actual) * 100;
+  if (lowerIsBetter) {
+    if (actual === 0) {
+      // Zero on a "keep this down" KPI. Where the target is also zero, the
+      // target has been met exactly and the month scores 100 — returning null
+      // here (as this used to) made a *perfect* month read as "nothing
+      // entered" and blocked the submission outright. Two of the pilot's KPIs
+      // are zero-target: payroll input errors, and escalations open at month
+      // end.
+      //
+      // Where the target is above zero, an actual of zero is better than
+      // asked for, but target / actual is undefined and there is no
+      // principled ceiling to substitute — so it stays unscored rather than
+      // invented, and whoever hits it can say so in the context note.
+      return target === 0 ? 100 : null;
+    }
+    return (target / actual) * 100;
+  }
   return target === 0 ? null : (actual / target) * 100;
 }
 

@@ -6,7 +6,8 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { auth } from '@/auth';
 import { canAccessEmployee } from '@/lib/access';
-import { FISCAL_YEAR } from '@/lib/constants';
+import { FISCAL_YEAR, now } from '@/lib/constants';
+import { deriveCycles } from '@/lib/cycles';
 import { prisma } from '@/lib/db';
 import { nextEditableMonthIndex } from '@/lib/kpi';
 
@@ -172,7 +173,10 @@ export async function saveKpiSet(_prev: MasterState, formData: FormData): Promis
     };
   }
 
-  const cycles = await prisma.cycle.findMany({ where: { fiscalYear: FISCAL_YEAR } });
+  const cycles = deriveCycles(
+    await prisma.cycle.findMany({ where: { fiscalYear: FISCAL_YEAR } }),
+    now(),
+  );
   const pendingFrom = nextEditableMonthIndex(cycles);
   if (pendingFrom === null) {
     return {
