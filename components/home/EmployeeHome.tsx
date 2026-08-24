@@ -43,6 +43,10 @@ export function EmployeeHome({ data }: { data: EmployeeHomeData }) {
     latestLocked,
   } = data;
 
+  // The bare /scorecard is the team index now; an employee's own record is at
+  // their own id, which is also where the sidebar sends them.
+  const scorecardHref = `/scorecard/${employee.id}`;
+
   // Nothing on record yet — a year strip of empty tracks over four "—" cards
   // reads as a broken screen, so say plainly that there is nothing to show.
   // Matches the empty states Scorecard and Reviews already render.
@@ -57,7 +61,7 @@ export function EmployeeHome({ data }: { data: EmployeeHomeData }) {
             <>
               Your reporting manager logs one score a month against your KPI set. As soon as the
               first month is submitted it appears here, and on your{' '}
-              <Link href="/scorecard" style={{ fontWeight: 700 }}>
+              <Link href={scorecardHref} style={{ fontWeight: 700 }}>
                 Scorecard
               </Link>
               .
@@ -162,7 +166,7 @@ export function EmployeeHome({ data }: { data: EmployeeHomeData }) {
               </div>
             </div>
             <Link
-              href="/scorecard"
+              href={scorecardHref}
               className="btn btn--primary"
               style={{ flex: 'none', fontSize: 14, textDecoration: 'none' }}
             >

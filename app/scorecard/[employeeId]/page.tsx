@@ -11,6 +11,12 @@ import { getScorecardData } from '@/lib/scorecard';
 export const metadata = { title: 'Scorecard · M3M Perform' };
 export const dynamic = 'force-dynamic';
 
+/**
+ * One person's Scorecard — including your own, which is what the sidebar's
+ * "My record" entry points at. There is no separate own-record route: the
+ * bare /scorecard is the team index now, and `own` below is the only thing
+ * that changes when the id happens to be yours.
+ */
 export default async function ScorecardPage({
   params,
 }: {
@@ -28,7 +34,8 @@ export default async function ScorecardPage({
   const isManager = session.user.role === 'MANAGER' && !own;
 
   // The visibility flag only ever gates an EMPLOYEE looking at their own
-  // record; it never affects what a manager or HR sees of someone else.
+  // record; it never affects what a manager or HR sees of someone else, nor
+  // what either sees of their own record.
   const isEmployeeOwnRecord = own && session.user.role === 'EMPLOYEE';
   if (isEmployeeOwnRecord && EMPLOYEE_RECORD_VISIBILITY === 'hidden') redirect('/profile');
   const maskOpenCycleData = isEmployeeOwnRecord && EMPLOYEE_RECORD_VISIBILITY === 'after-lock';
@@ -40,14 +47,36 @@ export default async function ScorecardPage({
   if (!data) notFound();
 
   if (!data.subject) {
+    // Second person on your own record, third on someone else's — the same
+    // fact reads as an accusation if it addresses the wrong reader.
     return (
       <>
         <ScreenHeader title="Scorecard" meta={`${FY_LABEL} · ${FY_RANGE_LABEL}`} />
-        <EmptyState
-          label="Nothing logged yet"
-          heading={`${data.employee.name} has no submitted months this year`}
-          body="Once a month is submitted, it will show here — the weighted score, the KRA matrix and the record status."
-        />
+        {data.hasKpiSet ? (
+          <EmptyState
+            label="Nothing logged yet"
+            heading={
+              own
+                ? 'You have no submitted months this year'
+                : `${data.employee.name} has no submitted months this year`
+            }
+            body="Once a month is submitted, it will show here — the weighted score, the KRA matrix and the record status."
+          />
+        ) : (
+          <EmptyState
+            label="No KRA set yet"
+            heading={
+              own
+                ? 'Your KPIs have not been set yet'
+                : `${data.employee.name}'s KPIs have not been set yet`
+            }
+            body={
+              own
+                ? 'Your own record starts once HR publishes the KRA set you are measured against. Until then there is nothing to score, and nothing here is missing on your side. This page fills in on its own the moment a set exists.'
+                : 'There is no KRA set for this person this fiscal year, so there is nothing to log against and nothing to score. Publish a set on their Profile and this page fills in on its own.'
+            }
+          />
+        )}
       </>
     );
   }

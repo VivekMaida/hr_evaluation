@@ -177,6 +177,16 @@ export type ScorecardData = {
   employee: { id: string; name: string; title: string };
   /** null means the employee exists but has nothing submitted yet. */
   subject: ScorecardSubject | null;
+  /**
+   * Whether a KRA set exists for this person this fiscal year at all.
+   *
+   * Distinguishes the two reasons a record can be empty, which read very
+   * differently to the person looking at it: nothing logged yet against a set
+   * that exists, or no set to log against. Derived from the data every time,
+   * so a record starts reading normally the moment someone publishes a set —
+   * there is no flag to flip and nothing to redeploy.
+   */
+  hasKpiSet: boolean;
 };
 
 function formatDate(d: Date | null): string {
@@ -226,7 +236,16 @@ export async function getScorecardData(
   const eligibleMonths = eligibleMonthCount(fromIndex);
 
   const months = countMonthsLogged(scores, fromIndex);
-  if (months === 0) return { employee: base, subject: null };
+  if (months === 0) {
+    // `kpis` is resolved as of month 12; a set whose every KRA was removed
+    // earlier in the year would read as empty there but is still a set that
+    // existed, so fall back to counting the year's rows before saying nobody
+    // has one. Only on this path, which is the rare one.
+    const hasKpiSet =
+      kpis.length > 0 ||
+      (await prisma.kpi.count({ where: { employeeId, fiscalYear: FISCAL_YEAR } })) > 0;
+    return { employee: base, subject: null, hasKpiSet };
+  }
 
   const points = pointsFromCycleScores(scores, fromIndex);
   const average = computeYearAverage(scores) as number;
@@ -384,5 +403,5 @@ export async function getScorecardData(
     priorRating,
   };
 
-  return { employee: base, subject };
+  return { employee: base, subject, hasKpiSet: kpis.length > 0 };
 }

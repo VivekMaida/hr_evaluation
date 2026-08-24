@@ -212,6 +212,16 @@ export type ReviewData = {
   employee: { id: string; name: string; title: string };
   /** null means the employee exists but no month has been logged yet. */
   subject: ReviewSubject | null;
+  /**
+   * Whether a KRA set exists for this person this fiscal year at all.
+   *
+   * Distinguishes the two reasons a record can be empty, which read very
+   * differently to the person looking at it: nothing logged yet against a set
+   * that exists, or no set to log against. Derived from the data every time,
+   * so a record starts reading normally the moment someone publishes a set —
+   * there is no flag to flip and nothing to redeploy.
+   */
+  hasKpiSet: boolean;
 };
 
 /** Short month label — "August 2026" becomes "Aug". */
@@ -346,7 +356,11 @@ export async function getReviewData(employeeId: string): Promise<ReviewData | nu
   const scores = await getEmployeeCycleScores(employeeId, FISCAL_YEAR);
   const eligible = scores.filter((s) => s.monthIndex >= fromIndex);
   const months = countMonthsLogged(scores, fromIndex);
-  if (months === 0) return { employee: base, subject: null };
+  if (months === 0) {
+    const hasKpiSet =
+      (await prisma.kpi.count({ where: { employeeId, fiscalYear: FISCAL_YEAR } })) > 0;
+    return { employee: base, subject: null, hasKpiSet };
+  }
 
   const points = pointsFromCycleScores(scores, fromIndex);
   const average = computeYearAverage(scores) as number;
@@ -425,7 +439,8 @@ export async function getReviewData(employeeId: string): Promise<ReviewData | nu
     queries,
   };
 
-  return { employee: base, subject };
+  // A logged month cannot exist without a KRA set behind it.
+  return { employee: base, subject, hasKpiSet: true };
 }
 
 /** Header chrome — the fiscal year, not a submission deadline. */

@@ -11,6 +11,10 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
+  // Nothing but the session. The sidebar's team-scoped Scorecard and Reviews
+  // links used to need an employee id in them, so this ran an
+  // employee.findFirst on every authenticated render just to pick one; those
+  // links now point at the team index, which needs no id at all.
   const session = await auth();
 
   return (

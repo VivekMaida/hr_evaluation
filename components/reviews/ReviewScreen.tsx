@@ -67,7 +67,10 @@ export function ReviewScreen({
   /** Viewing your own record — changes who the copy addresses. */
   own?: boolean;
 }) {
-  const scorecardHref = own ? '/scorecard' : `/scorecard/${S.id}`;
+  // Always the id route, own record included: /scorecard is the team index,
+  // so the bare path would take a manager looking at their own year to a list
+  // of their reports instead.
+  const scorecardHref = `/scorecard/${S.id}`;
   const { recency } = S;
   const unacknowledged = S.acknowledgements.length - S.acknowledgedCount;
   const openQueries = S.queries.filter((q) => q.state === 'OPEN').length;

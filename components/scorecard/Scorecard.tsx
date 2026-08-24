@@ -99,7 +99,9 @@ export function Scorecard({
   const sd = consistency(subject.points);
   const delta = trend(subject.points);
   const h = halves(subject.points);
-  const reviewsHref = own ? '/reviews' : `/reviews/${subject.id}`;
+  // Always the id route — see the matching note on ReviewScreen. /reviews is
+  // the team index, not anybody's own record.
+  const reviewsHref = `/reviews/${subject.id}`;
   const anyNotes = subject.matrix.some((row) => row.notes.some(Boolean));
   // Months that closed empty, as against months that simply have not happened
   // yet. Early in a fiscal year almost all the shortfall is the latter, and
