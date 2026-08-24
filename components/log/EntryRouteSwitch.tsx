@@ -1,30 +1,36 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 /**
- * Entry route is a segmented control at the top of Performance Log. Only the
- * form route exists: the spreadsheet route was drawn but never wired up — it
- * parsed no file and wrote nothing — so it is named here as a planned route
- * and is not a link. There is no /performance-log/upload page to link to.
+ * Entry route is a segmented control at the top of Performance Log. Both
+ * routes write the same record through the same rules — the spreadsheet one
+ * validates a whole team's month in one pass and refuses partial files until
+ * they are confirmed, the form takes one person at a time.
  */
 export function EntryRouteSwitch() {
+  const pathname = usePathname();
+  const onUpload = pathname.startsWith('/performance-log/upload');
+
   return (
     <div className="segmented" role="group" aria-label="Entry route">
       <Link
         href="/performance-log"
         className="segmented__option"
-        aria-pressed={true}
+        aria-pressed={!onUpload}
         style={{ textDecoration: 'none' }}
       >
         Form entry
       </Link>
-      <span
+      <Link
+        href="/performance-log/upload"
         className="segmented__option"
-        aria-pressed={false}
-        style={{ color: 'var(--grey-line)', cursor: 'not-allowed' }}
-        title="Spreadsheet upload isn't built yet — the form is the only route that records a month"
+        aria-pressed={onUpload}
+        style={{ textDecoration: 'none' }}
       >
         Spreadsheet upload
-      </span>
+      </Link>
     </div>
   );
 }

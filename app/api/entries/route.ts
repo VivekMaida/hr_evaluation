@@ -6,7 +6,7 @@ import { FISCAL_YEAR, now } from '@/lib/constants';
 import { getActiveReopen, resolveReopen } from '@/lib/corrections';
 import { deriveCycle } from '@/lib/cycles';
 import { prisma } from '@/lib/db';
-import { blockers, buildRows, weightedScoreOf } from '@/lib/entries';
+import { blockers, buildRows, lockedMonthMessage, weightedScoreOf } from '@/lib/entries';
 import { getEmployeeCycleScores, pointsFromCycleScores } from '@/lib/employee-year';
 import { getKpiSetForCycle } from '@/lib/kpi';
 
@@ -138,9 +138,7 @@ export async function POST(request: Request) {
   const reopened = cycle.state === 'OPEN' ? null : await getActiveReopen(employeeId, cycle.id);
   if (cycle.state !== 'OPEN' && !reopened) {
     return NextResponse.json(
-      {
-        error: `${cycle.label} is ${cycle.state.toLowerCase()} and cannot be edited. Ask HR to approve a correction request to reopen it.`,
-      },
+      { error: lockedMonthMessage(cycle.label, cycle.state) },
       { status: 409 },
     );
   }

@@ -3,6 +3,15 @@ import type { KpiRow } from './kpi';
 /** A context note is required when achievement lands outside this band. */
 export const NOTE_BAND = { low: 70, high: 120 } as const;
 
+/**
+ * The one refusal a locked month gives, whatever route the write came from.
+ * Shared so the form API and the spreadsheet upload cannot drift into telling
+ * a manager two different things about the same month.
+ */
+export function lockedMonthMessage(cycleLabel: string, cycleState: string): string {
+  return `${cycleLabel} is ${cycleState.toLowerCase()} and cannot be edited. Ask HR to approve a correction request to reopen it.`;
+}
+
 export type EntryInput = {
   kpiId: string;
   actual: number | null;
