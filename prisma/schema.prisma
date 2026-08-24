@@ -305,7 +305,22 @@ model Submission {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([employeeId, cycleId, state])
+  /// A month holds at most one SUBMITTED and at most one DRAFT, but any number
+  /// of SUPERSEDED rows — every correction leaves another one behind. That is
+  /// two *partial* unique indexes, which Prisma has no syntax for, so they live
+  /// as raw SQL in the migration that introduced them
+  /// (20260824000000_submission_partial_unique) rather than here:
+  ///   Submission_one_submitted_per_month  (employeeId, cycleId) WHERE SUBMITTED
+  ///   Submission_one_draft_per_month      (employeeId, cycleId) WHERE DRAFT
+  /// They replaced @@unique([employeeId, cycleId, state]), which capped a month
+  /// at one superseded row, so a second correction failed with P2002.
+  /// Prisma's diffing ignores partial indexes rather than misreading them, so
+  /// they do not show up as drift: with the migration applied,
+  /// `migrate diff` between this schema and the live database is empty
+  /// (checked). What they are invisible to is provisioning a database from
+  /// this schema alone — `prisma db push` would not create them. Always reach
+  /// a database through the migrations (`npm run db:deploy`).
+  @@index([employeeId, cycleId])
   @@index([cycleId, state])
 }
 

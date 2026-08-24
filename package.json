@@ -2,7 +2,7 @@
   "name": "m3m-perform",
   "version": "0.1.0",
   "private": true,
-  "description": "M3M Perform — monthly performance logging, scorecards and annual reviews.",
+  "description": "M3M Perform \u2014 monthly performance logging, scorecards and annual reviews.",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
@@ -15,7 +15,8 @@
     "db:seed": "dotenv -e .env.local -- tsx prisma/seed.ts",
     "db:seed:pilot": "dotenv -e .env.local -- tsx prisma/seed-pilot.ts",
     "db:studio": "dotenv -e .env.local -- prisma studio",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "test": "dotenv -e .env.local -- node --import tsx --test \"tests/*.test.ts\""
   },
   "dependencies": {
     "@prisma/client": "6.19.3",
