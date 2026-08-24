@@ -4,6 +4,9 @@ import { deriveCycles } from './cycles';
 import { prisma } from './db';
 import { FY_MONTHS, type MonthPoint } from './types';
 
+/** IST is +05:30 year-round; there is no daylight saving to account for. */
+const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
+
 /** One fiscal year's twelve cycles for one employee, scores where submitted. */
 export type CycleScore = {
   cycleId: string;
@@ -20,12 +23,35 @@ export function priorFiscalYear(fiscalYear: string): string {
   return `${start - 1}-${String((end - 1 + 100) % 100).padStart(2, '0')}`;
 }
 
-/** 1 = April of the fiscal year's start year, 12 = March of the next; a date on
- *  or before that April 1 clamps to 1, a date beyond the following March 31 to 12. */
-function monthIndexOf(date: Date, fyStart: Date): number {
-  if (date <= fyStart) return 1;
-  const monthsSinceStart =
-    (date.getFullYear() - fyStart.getFullYear()) * 12 + (date.getMonth() - fyStart.getMonth());
+/**
+ * Calendar year and month (1-12) of an instant, read in IST.
+ *
+ * Every scheduled date in this app is written against IST — see the ist()
+ * helper in lib/cycles.ts — so the calendar month an instant falls in has to
+ * be read in IST too, not in whatever zone the server happens to run in.
+ * Shifting by the offset and then reading UTC parts is exact here because IST
+ * has no daylight saving.
+ */
+function istParts(date: Date): { year: number; month: number } {
+  const shifted = new Date(date.getTime() + IST_OFFSET_MS);
+  return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth() + 1 };
+}
+
+/**
+ * 1 = April of the fiscal year's start year, 12 = March of the next; a date
+ * before that April clamps to 1, one beyond the following March to 12.
+ *
+ * This used to read date.getMonth()/getFullYear() straight off the instant and
+ * compare against a locally-constructed April 1. Both are local-time
+ * operations, and PROGRAMME_START is pinned to +05:30, so on any server west
+ * of IST — a UTC host, which is what the deployment runs on — it localised
+ * to 31 July and every eligibility figure shifted a month early: an
+ * August-to-March programme measured as nine months instead of eight.
+ */
+function monthIndexOf(date: Date, fyStartYear: number): number {
+  const { year, month } = istParts(date);
+  // April of fyStartYear is index 1, so month 4 of that year is offset 0.
+  const monthsSinceStart = (year - fyStartYear) * 12 + (month - 4);
   return Math.min(12, Math.max(1, monthsSinceStart + 1));
 }
 
@@ -41,9 +67,8 @@ function monthIndexOf(date: Date, fyStart: Date): number {
  */
 export function eligibleFromMonthIndex(joinedOn: Date | null, fiscalYear: string): number {
   const [startYear] = fiscalYear.split('-').map(Number);
-  const fyStart = new Date(startYear, 3, 1);
-  const programmeIndex = monthIndexOf(PROGRAMME_START, fyStart);
-  const joinedIndex = joinedOn ? monthIndexOf(joinedOn, fyStart) : 1;
+  const programmeIndex = monthIndexOf(PROGRAMME_START, startYear);
+  const joinedIndex = joinedOn ? monthIndexOf(joinedOn, startYear) : 1;
   return Math.max(programmeIndex, joinedIndex);
 }
 

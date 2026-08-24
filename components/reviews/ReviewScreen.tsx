@@ -290,7 +290,12 @@ export function ReviewScreen({
               ? 'Marking a month as seen is optional. It records the date you looked at it and shows that date to your manager and HR. Nothing is blocked if you never do it — the month still counts and still locks.'
               : 'Which months this person has confirmed seeing, and when. Acknowledging is optional and blocks nothing: an unacknowledged month still counts toward the year and still locks on schedule. Nobody is chased for it.'}
           </p>
-          <table className="data-table" style={{ fontSize: 14, marginTop: 6 }}>
+          {/* Capped, not full width. Three narrow columns stretched across the
+              card left the Month cell 780px wide, so "Score" and "Confirmed
+              seen" ended up in a cluster at the far right with their content
+              nowhere near the month it belonged to. At this width each header
+              sits directly over its own column. */}
+          <table className="data-table" style={{ fontSize: 14, marginTop: 6, maxWidth: 560 }}>
             <thead>
               <tr>
                 <th style={{ padding: '9px 12px' }}>Month</th>
@@ -302,14 +307,26 @@ export function ReviewScreen({
             </thead>
             <tbody>
               {S.acknowledgements.map((a) => (
+                /* verticalAlign middle rather than the table default of top:
+                   a chip is taller than plain text and carries its own vertical
+                   padding, so top-aligning sat "Not marked" 3px below the score
+                   beside it. Every cell here is a single line, so centring is
+                   safe and makes the row read as one line. */
                 <tr key={a.monthIndex}>
-                  <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--navy)' }}>
+                  <td
+                    style={{
+                      padding: '10px 12px',
+                      fontWeight: 700,
+                      color: 'var(--navy)',
+                      verticalAlign: 'middle',
+                    }}
+                  >
                     {a.monthLabel}
                   </td>
-                  <td className="is-num" style={{ padding: '10px 10px' }}>
+                  <td className="is-num" style={{ padding: '10px 10px', verticalAlign: 'middle' }}>
                     {a.score === null ? '—' : a.score.toFixed(1)}
                   </td>
-                  <td style={{ padding: '10px 12px' }}>
+                  <td style={{ padding: '10px 12px', verticalAlign: 'middle' }}>
                     {a.acknowledgedAtLabel ? (
                       <Chip tone="green" tight>
                         {a.acknowledgedAtLabel}

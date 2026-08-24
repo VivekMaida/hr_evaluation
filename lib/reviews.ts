@@ -42,7 +42,13 @@ export type Band = {
   /** null means open-ended at the top. */
   to: number | null;
   range: string;
-  /** What the band actually asserts about the year — the words, not the number. */
+  /**
+   * What the band asserts about the year, in the plainest words that still say
+   * it. Read aloud in an appraisal conversation, so each one opens by naming
+   * the result against target and then says what to do about it. A reader who
+   * treats these percentages as exam marks will read 85.7 as a failure unless
+   * the words say otherwise, which is the whole job of this field.
+   */
   meaning: string;
 };
 
@@ -54,7 +60,7 @@ export const BANDS: Band[] = [
     to: 69.999,
     range: 'Under 70',
     meaning:
-      'The months on record are materially short of what the role requires. This is a conversation about what has to change, by when, and what support is needed — not a ranking exercise.',
+      'Targets missed. The months on record are well short of what the role needs. Agree what has to change, by when, and what support it takes — this is not a ranking exercise.',
   },
   {
     value: 2,
@@ -63,7 +69,7 @@ export const BANDS: Band[] = [
     to: 84.999,
     range: '70 – 84',
     meaning:
-      'Part of the role is being delivered and part is not. The useful output of this conversation is naming which KRAs are short and agreeing what changes on them.',
+      'Some targets met, some missed. Name which key result areas are short and agree what changes on them.',
   },
   {
     value: 3,
@@ -72,7 +78,7 @@ export const BANDS: Band[] = [
     to: 99.999,
     range: '85 – 99',
     meaning:
-      'The role is being done as defined. This is the expected result of a solid year and should not be discussed as a shortfall.',
+      'Targets met. A score near 100 means the role is being delivered as expected — it is not a shortfall.',
   },
   {
     value: 4,
@@ -81,7 +87,7 @@ export const BANDS: Band[] = [
     to: 114.999,
     range: '100 – 114',
     meaning:
-      'Consistently ahead of what the role requires across the months on record. Worth being specific about which KRAs carried it, so it can be repeated.',
+      'Targets beaten, consistently, across the months on record. Say which key result areas carried it, so it can be repeated.',
   },
   {
     value: 5,
@@ -90,7 +96,7 @@ export const BANDS: Band[] = [
     to: null,
     range: '115 and above',
     meaning:
-      'Far ahead of the role’s requirements and sustained, not a single strong month. Expect this to need evidence in the notes below to stand up in calibration.',
+      'Targets beaten by a wide margin, and held there — not one strong month. Calibration will ask for the evidence in the notes below.',
   },
 ];
 
