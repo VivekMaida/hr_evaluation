@@ -7,6 +7,7 @@ import { prisma } from '@/lib/db';
 import { resolveReopen } from '@/lib/corrections';
 import { blockers, buildRows, lockedMonthMessage, weightedScoreOf } from '@/lib/entries';
 import { parseTemplate, validate, type AcceptedRow, type UploadReport } from '@/lib/upload';
+import { writeSubmission } from '@/lib/submission-write';
 import { getUploadScope } from '@/lib/upload-subjects';
 
 export const runtime = 'nodejs';
@@ -125,6 +126,13 @@ export type CommittedEmployee = {
   rowsWritten: number;
   submitted: boolean;
   weightedScore: number | null;
+  /**
+   * Set when this commit changed a month that had already been submitted and
+   * so returned it to a draft. The confirmation screen names these people —
+   * a month that was published and is now not is the one outcome a manager
+   * must not have to discover for themselves.
+   */
+  unsubmittedFrom: number | null;
 };
 
 /**
@@ -150,8 +158,8 @@ async function commitAccepted(
     const subject = scope.subjects.get(employeeId);
     if (!subject) continue;
 
-    const outcome = report.employees.find((e) => e.employeeId === employeeId);
-    const willSubmit = outcome?.willSubmit ?? false;
+    const predicted = report.employees.find((e) => e.employeeId === employeeId);
+    const willSubmit = predicted?.willSubmit ?? false;
 
     // The score is recomputed from the merged month, not from the uploaded
     // rows alone — see outcomes() in lib/upload.ts.
@@ -163,6 +171,8 @@ async function commitAccepted(
     const score = weightedScoreOf(built);
     const check = blockers(built);
     const submit = willSubmit && !check.blocked;
+
+    let written!: Awaited<ReturnType<typeof writeSubmission>>;
 
     await prisma.$transaction(async (tx) => {
       for (const row of rows) {
@@ -187,67 +197,18 @@ async function commitAccepted(
         });
       }
 
-      const existing = await tx.submission.findFirst({
-        where: { employeeId, cycleId: cycle.id, state: { in: ['DRAFT', 'SUBMITTED'] } },
+      // One shared state machine for both writers — see lib/submission-write.ts.
+      // When a row of this person's was refused, `submit` is false, and a month
+      // that was already submitted is returned to a draft carrying the merged
+      // score rather than left asserting the old one.
+      written = await writeSubmission(tx, {
+        employeeId,
+        cycleId: cycle.id,
+        score,
+        submit,
+        source: 'UPLOAD',
+        actorId,
       });
-
-      if (submit) {
-        if (existing?.state === 'SUBMITTED') {
-          await tx.submission.update({ where: { id: existing.id }, data: { state: 'SUPERSEDED' } });
-          await tx.submission.create({
-            data: {
-              employeeId,
-              cycleId: cycle.id,
-              weightedScore: score,
-              state: 'SUBMITTED',
-              source: 'UPLOAD',
-              submittedAt: new Date(),
-              submittedById: actorId,
-              supersedesId: existing.id,
-            },
-          });
-        } else if (existing) {
-          await tx.submission.update({
-            where: { id: existing.id },
-            data: {
-              weightedScore: score,
-              state: 'SUBMITTED',
-              source: 'UPLOAD',
-              submittedAt: new Date(),
-              submittedById: actorId,
-            },
-          });
-        } else {
-          await tx.submission.create({
-            data: {
-              employeeId,
-              cycleId: cycle.id,
-              weightedScore: score,
-              state: 'SUBMITTED',
-              source: 'UPLOAD',
-              submittedAt: new Date(),
-              submittedById: actorId,
-            },
-          });
-        }
-      } else if (existing) {
-        if (existing.state === 'DRAFT') {
-          await tx.submission.update({
-            where: { id: existing.id },
-            data: { weightedScore: score, source: 'UPLOAD' },
-          });
-        }
-      } else {
-        await tx.submission.create({
-          data: {
-            employeeId,
-            cycleId: cycle.id,
-            weightedScore: score,
-            state: 'DRAFT',
-            source: 'UPLOAD',
-          },
-        });
-      }
 
       await tx.activityLog.create({
         data: {
@@ -257,8 +218,17 @@ async function commitAccepted(
           kind: submit ? 'MONTH_SUBMITTED' : 'ENTRY_SAVED',
           summary: submit
             ? `${cycle.label} submitted from a spreadsheet${score === null ? '' : `, ${score.toFixed(1)}`}`
-            : `${cycle.label} draft saved from a spreadsheet`,
-          meta: { weightedScore: score, rowCount: rows.length, source: 'UPLOAD' },
+            : written.unsubmitted
+              ? `${cycle.label} changed by spreadsheet after submission and returned to draft${
+                  score === null ? '' : `, now ${score.toFixed(1)}`
+                }`
+              : `${cycle.label} draft saved from a spreadsheet`,
+          meta: {
+            weightedScore: score,
+            rowCount: rows.length,
+            source: 'UPLOAD',
+            ...(written.unsubmitted ? { unsubmittedFrom: written.unsubmitted.previousScore } : {}),
+          },
         },
       });
     });
@@ -286,6 +256,7 @@ async function commitAccepted(
       rowsWritten: rows.length,
       submitted: submit,
       weightedScore: score,
+      unsubmittedFrom: written.unsubmitted?.previousScore ?? null,
     });
   }
 

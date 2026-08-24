@@ -9,6 +9,7 @@ import { prisma } from '@/lib/db';
 import { blockers, buildRows, lockedMonthMessage, weightedScoreOf } from '@/lib/entries';
 import { getEmployeeCycleScores, pointsFromCycleScores } from '@/lib/employee-year';
 import { getKpiSetForCycle } from '@/lib/kpi';
+import { writeSubmission, type SubmissionOutcome } from '@/lib/submission-write';
 
 export const runtime = 'nodejs';
 // Always hit the database; a cached month is a wrong month.
@@ -166,6 +167,8 @@ export async function POST(request: Request) {
 
   const actorId = session.user.employeeId;
 
+  let outcome!: SubmissionOutcome;
+
   await prisma.$transaction(async (tx) => {
     for (const row of rows) {
       await tx.monthlyEntry.upsert({
@@ -188,70 +191,18 @@ export async function POST(request: Request) {
       });
     }
 
-    const existing = await tx.submission.findFirst({
-      where: { employeeId, cycleId: cycle.id, state: { in: ['DRAFT', 'SUBMITTED'] } },
+    // One shared state machine for both writers — see lib/submission-write.ts.
+    // A month that was submitted and is being saved rather than confirmed
+    // comes back as a draft carrying the new score, so a submitted month can
+    // never disagree with the entries under it.
+    outcome = await writeSubmission(tx, {
+      employeeId,
+      cycleId: cycle.id,
+      score,
+      submit,
+      source: 'FORM',
+      actorId,
     });
-
-    if (submit) {
-      // Supersede rather than overwrite, so what was claimed when survives.
-      if (existing?.state === 'SUBMITTED') {
-        await tx.submission.update({
-          where: { id: existing.id },
-          data: { state: 'SUPERSEDED' },
-        });
-        await tx.submission.create({
-          data: {
-            employeeId,
-            cycleId: cycle.id,
-            weightedScore: score,
-            state: 'SUBMITTED',
-            source: 'FORM',
-            submittedAt: new Date(),
-            submittedById: actorId,
-            supersedesId: existing.id,
-          },
-        });
-      } else if (existing) {
-        await tx.submission.update({
-          where: { id: existing.id },
-          data: {
-            weightedScore: score,
-            state: 'SUBMITTED',
-            submittedAt: new Date(),
-            submittedById: actorId,
-          },
-        });
-      } else {
-        await tx.submission.create({
-          data: {
-            employeeId,
-            cycleId: cycle.id,
-            weightedScore: score,
-            state: 'SUBMITTED',
-            source: 'FORM',
-            submittedAt: new Date(),
-            submittedById: actorId,
-          },
-        });
-      }
-    } else if (existing) {
-      if (existing.state === 'DRAFT') {
-        await tx.submission.update({
-          where: { id: existing.id },
-          data: { weightedScore: score },
-        });
-      }
-    } else {
-      await tx.submission.create({
-        data: {
-          employeeId,
-          cycleId: cycle.id,
-          weightedScore: score,
-          state: 'DRAFT',
-          source: 'FORM',
-        },
-      });
-    }
 
     await tx.activityLog.create({
       data: {
@@ -261,8 +212,16 @@ export async function POST(request: Request) {
         kind: submit ? 'MONTH_SUBMITTED' : 'ENTRY_SAVED',
         summary: submit
           ? `${cycle.label} submitted${score === null ? '' : `, ${score.toFixed(1)}`}`
-          : `${cycle.label} draft saved`,
-        meta: { weightedScore: score, rowCount: rows.length },
+          : outcome.unsubmitted
+            ? `${cycle.label} edited after submission and returned to draft${
+                score === null ? '' : `, now ${score.toFixed(1)}`
+              }`
+            : `${cycle.label} draft saved`,
+        meta: {
+          weightedScore: score,
+          rowCount: rows.length,
+          ...(outcome.unsubmitted ? { unsubmittedFrom: outcome.unsubmitted.previousScore } : {}),
+        },
       },
     });
   });
@@ -288,6 +247,14 @@ export async function POST(request: Request) {
     saved: rows.length,
     weightedScore: score,
     submitted: submit,
+    submissionState: outcome.state,
+    /**
+     * Set when this save changed a month that had already been submitted, so
+     * it has been returned to a draft. The form has to say this out loud.
+     */
+    unsubmitted: outcome.unsubmitted
+      ? { previousScore: outcome.unsubmitted.previousScore }
+      : null,
     /** Set while this month is only writable because of an approved correction. */
     reopened: reopened ? { reason: reopened.reason, approvedAtLabel: reopened.approvedAtLabel } : null,
     ...check,

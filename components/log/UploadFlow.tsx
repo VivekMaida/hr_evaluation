@@ -18,7 +18,20 @@ type CommittedEmployee = {
   rowsWritten: number;
   submitted: boolean;
   weightedScore: number | null;
+  /** The score it was submitted at before this commit returned it to a draft. */
+  unsubmittedFrom: number | null;
 };
+
+/**
+ * A month this upload would take, or has taken, out of "submitted".
+ *
+ * Worth its own helper because the sentence has to read the same on the
+ * confirm screen and the done screen: a manager who published a figure and
+ * then had it unpublished by their own upload must be told in both places.
+ */
+function unsubmits(e: { previouslySubmittedScore: number | null; willSubmit: boolean }): boolean {
+  return e.previouslySubmittedScore !== null && !e.willSubmit;
+}
 
 type Report = {
   stage: 'validated' | 'committed';
@@ -254,6 +267,32 @@ export function UploadFlow({
             </div>
           </Card>
 
+          {report.employees.some(unsubmits) ? (
+            <div className="callout callout--alert" role="alert" style={{ padding: '14px 18px' }}>
+              <div className="callout__title">
+                This unpublishes {report.employees.filter(unsubmits).length} month
+                {report.employees.filter(unsubmits).length === 1 ? '' : 's'} that
+                {report.employees.filter(unsubmits).length === 1 ? ' has' : ' have'} already been
+                submitted
+              </div>
+              <div style={{ fontSize: 14, lineHeight: 1.6, maxWidth: '82ch' }}>
+                {report.employees
+                  .filter(unsubmits)
+                  .map(
+                    (e) =>
+                      `${e.employeeName} (submitted at ${e.previouslySubmittedScore?.toFixed(1)}, would become a draft at ${
+                        e.weightedScore === null ? '—' : e.weightedScore.toFixed(1)
+                      })`,
+                  )
+                  .join('; ')}
+                . A submitted month always carries the score of the entries under it, so changing
+                those entries without confirming the month returns it to a draft rather than leaving
+                it published at a figure that no longer matches. Submit each one again to republish
+                it.
+              </div>
+            </div>
+          ) : null}
+
           {report.employees.length > 0 ? (
             <Card style={{ padding: '20px 24px 22px' }}>
               <SectionLabel>What this does to each person&rsquo;s month</SectionLabel>
@@ -299,6 +338,26 @@ export function UploadFlow({
                             <Chip tone="green" tight>
                               Submits the month
                             </Chip>
+                          ) : unsubmits(e) ? (
+                            <>
+                              <Chip tone="red" tight>
+                                Returns to a draft
+                              </Chip>
+                              <div
+                                style={{
+                                  fontSize: 12.5,
+                                  color: 'var(--red)',
+                                  fontWeight: 700,
+                                  marginTop: 4,
+                                  maxWidth: '46ch',
+                                  lineHeight: 1.5,
+                                }}
+                              >
+                                Already submitted at {e.previouslySubmittedScore?.toFixed(1)}. These
+                                rows change the month, so confirming unpublishes it and it will need
+                                submitting again.
+                              </div>
+                            </>
                           ) : (
                             <>
                               <Chip tone="amber" tight>
@@ -378,6 +437,33 @@ export function UploadFlow({
             </div>
           </Card>
 
+          {(report.committed ?? []).some((c) => c.unsubmittedFrom !== null) ? (
+            <div className="callout callout--alert" role="alert" style={{ padding: '14px 18px' }}>
+              <div className="callout__title">
+                {(report.committed ?? []).filter((c) => c.unsubmittedFrom !== null).length} already
+                submitted month
+                {(report.committed ?? []).filter((c) => c.unsubmittedFrom !== null).length === 1
+                  ? ' was'
+                  : 's were'}{' '}
+                returned to a draft
+              </div>
+              <div style={{ fontSize: 14, lineHeight: 1.6, maxWidth: '82ch' }}>
+                {(report.committed ?? [])
+                  .filter((c) => c.unsubmittedFrom !== null)
+                  .map(
+                    (c) =>
+                      `${c.employeeName} was submitted at ${c.unsubmittedFrom?.toFixed(1)} and is now a draft at ${
+                        c.weightedScore === null ? '—' : c.weightedScore.toFixed(1)
+                      }`,
+                  )
+                  .join('; ')}
+                . {cycleLabel} no longer counts as submitted for them, and will not carry a score
+                into Reviews or Calibration until it is submitted again. Open the form to check the
+                month and submit it.
+              </div>
+            </div>
+          ) : null}
+
           {(report.committed ?? []).length > 0 ? (
             <Card style={{ padding: '20px 24px 22px' }}>
               <SectionLabel>What committed</SectionLabel>
@@ -405,9 +491,27 @@ export function UploadFlow({
                           <Num value={c.weightedScore} />
                         </td>
                         <td style={{ ...CELL, verticalAlign: 'middle' }}>
-                          <Chip tone={c.submitted ? 'green' : 'amber'} tight>
+                          <Chip
+                            tone={c.submitted ? 'green' : c.unsubmittedFrom !== null ? 'red' : 'amber'}
+                            tight
+                          >
                             {c.submitted ? 'Submitted' : 'Draft'}
                           </Chip>
+                          {c.unsubmittedFrom !== null ? (
+                            <div
+                              style={{
+                                fontSize: 12.5,
+                                color: 'var(--red)',
+                                fontWeight: 700,
+                                marginTop: 4,
+                                maxWidth: '34ch',
+                                lineHeight: 1.5,
+                              }}
+                            >
+                              Was submitted at {c.unsubmittedFrom.toFixed(1)} — submit again to
+                              republish
+                            </div>
+                          ) : null}
                         </td>
                         <td style={{ ...CELL, verticalAlign: 'middle', textAlign: 'right' }}>
                           <Link

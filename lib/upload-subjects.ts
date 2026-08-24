@@ -59,11 +59,17 @@ export async function getUploadScope(
     return { subjects: new Map(), otherEmployeeIds, template: [], lockedForEveryone: false };
   }
 
-  const [kpisByEmployee, entries, reopens] = await Promise.all([
+  const [kpisByEmployee, entries, submissions, reopens] = await Promise.all([
     getKpiSetForCycleBatch(ids, fiscalYear, cycle.monthIndex),
     prisma.monthlyEntry.findMany({
       where: { employeeId: { in: ids }, cycleId: cycle.id },
       select: { employeeId: true, kpiId: true, actual: true, contextNote: true },
+    }),
+    // What each month currently claims. Needed so the validation report can
+    // say up front that confirming would return a submitted month to a draft.
+    prisma.submission.findMany({
+      where: { employeeId: { in: ids }, cycleId: cycle.id, state: 'SUBMITTED' },
+      select: { employeeId: true, weightedScore: true },
     }),
     // Only a closed month needs asking. An open one is writable for everyone.
     cycle.state === 'OPEN'
@@ -80,6 +86,9 @@ export async function getUploadScope(
   ]);
 
   const reopened = new Set(reopens.map((r) => r.employeeId));
+  const submittedScoreByEmployee = new Map(
+    submissions.map((s) => [s.employeeId, s.weightedScore === null ? null : Number(s.weightedScore)]),
+  );
   const entriesByEmployee = new Map<string, SubjectContext['existing']>();
   for (const e of entries) {
     const list = entriesByEmployee.get(e.employeeId) ?? [];
@@ -108,6 +117,9 @@ export async function getUploadScope(
       kpis,
       existing: entriesByEmployee.get(employee.id) ?? [],
       lockedMessage: locked,
+      submittedScore: submittedScoreByEmployee.has(employee.id)
+        ? (submittedScoreByEmployee.get(employee.id) ?? null)
+        : null,
     });
     template.push({ employeeId: employee.id, employeeName: employee.name, kpis });
   }

@@ -187,6 +187,16 @@ export type EmployeeOutcome = {
    * to make, in the sheet or on the form.
    */
   willSubmit: boolean;
+  /**
+   * The score this month is already submitted at, or null if it is not
+   * submitted.
+   *
+   * Read with `willSubmit`: when this is set and `willSubmit` is false, the
+   * commit will return a published month to a draft carrying `weightedScore`.
+   * That is the one outcome a manager must be told about up front, so it is
+   * predicted here rather than only reported afterwards.
+   */
+  previouslySubmittedScore: number | null;
 };
 
 export type UploadReport = {
@@ -205,6 +215,13 @@ export type SubjectContext = {
   existing: ExistingEntry[];
   /** null when writable; the refusal text when the month is locked for them. */
   lockedMessage: string | null;
+  /**
+   * The score this month is currently submitted at, or null if it is not
+   * submitted. Carried so the report can warn *before* the manager confirms
+   * that confirming would return a published month to a draft — see
+   * `previouslySubmittedScore` on EmployeeOutcome.
+   */
+  submittedScore: number | null;
 };
 
 export type UploadContext = {
@@ -383,6 +400,10 @@ function outcomes(
       missingActuals: check.missingActuals,
       missingNotes: check.missingNotes,
       willSubmit: mine.length > 0 && !check.blocked && rejectedForEmployee === 0,
+      // Only meaningful when rows will actually be written for this person; a
+      // person whose every row was refused has nothing written and so nothing
+      // unsubmitted.
+      previouslySubmittedScore: mine.length > 0 ? subject.submittedScore : null,
     });
   }
 

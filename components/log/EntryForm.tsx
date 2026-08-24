@@ -55,6 +55,13 @@ export function EntryForm({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'idle' | 'saving' | 'submitting'>('idle');
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  /**
+   * Set when the last save changed a month that had already been submitted,
+   * so the server returned it to a draft. Editing a submitted month in an open
+   * cycle is allowed, but it unpublishes it — the manager has to be told, or
+   * they walk away believing the month is still submitted at the old score.
+   */
+  const [unsubmittedFrom, setUnsubmittedFrom] = useState<number | null>(null);
 
   const currentIndex = useMemo(() => team.findIndex((m) => m.id === employeeId), [team, employeeId]);
 
@@ -64,6 +71,7 @@ export function EntryForm({
     setLoadError(null);
     setSaveError(null);
     setSavedAt(null);
+    setUnsubmittedFrom(null);
 
     fetch(`/api/entries?employeeId=${encodeURIComponent(employeeId)}&monthIndex=${monthIndex}`)
       .then(async (res) => {
@@ -116,6 +124,7 @@ export function EntryForm({
       if (!data) return;
       setBusy(submit ? 'submitting' : 'saving');
       setSaveError(null);
+      setUnsubmittedFrom(null);
       try {
         const res = await fetch('/api/entries', {
           method: 'POST',
@@ -136,6 +145,24 @@ export function EntryForm({
         setSavedAt(
           new Date().toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }),
         );
+        if (!submit) {
+          // The server decides the resulting state, not this component: a save
+          // over a submitted month comes back as a draft.
+          setUnsubmittedFrom(body.unsubmitted ? (body.unsubmitted.previousScore ?? null) : null);
+          setData((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  submission: {
+                    state: body.submissionState ?? 'DRAFT',
+                    weightedScore: body.weightedScore,
+                    submittedAt: null,
+                  },
+                }
+              : prev,
+          );
+        }
+
         if (submit) {
           setData((prev) =>
             prev
@@ -228,6 +255,20 @@ export function EntryForm({
           </Link>
         </div>
       </div>
+
+      {unsubmittedFrom !== null ? (
+        <div className="callout callout--alert" role="alert" style={{ padding: '16px 20px' }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--navy)' }}>
+            {data.cycle.label} was submitted at {unsubmittedFrom.toFixed(1)} and is now a draft.
+          </div>
+          <div style={{ fontSize: 14, color: 'var(--grey-body)', marginTop: 4, maxWidth: '82ch' }}>
+            A submitted month always carries the score of the entries under it, so saving a change
+            without submitting returns it to a draft rather than leaving it published at a figure
+            that no longer matches. It will not carry a score into Reviews or Calibration until you
+            submit it again.
+          </div>
+        </div>
+      ) : null}
 
       {!editable ? (
         <div className="callout callout--neutral" style={{ padding: '16px 20px' }}>
