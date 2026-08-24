@@ -14,3 +14,12 @@ npm-debug.log*
 
 .vercel
 .env*
+
+# Scratch scripts from debugging and verification sessions. Throwaway by
+# design — they read and sometimes write the pilot database, and three of them
+# reached a commit once, which is why this rule exists.
+tmp-*
+
+# Rollback copies of deleted records, written before a destructive change.
+# Kept on disk on purpose; a database record still does not belong in git.
+*-removed.json
